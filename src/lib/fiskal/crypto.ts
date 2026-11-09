@@ -15,7 +15,7 @@ export async function encrypt(plain: string, secret: string): Promise<string> {
 }
 
 export async function decrypt(token: string, secret: string): Promise<string> {
-  const [iv, ct] = token.split(".");
+  const [iv = "", ct = ""] = token.split(".");
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(iv) }, await key(secret), unb64(ct));
   return new TextDecoder().decode(pt);
 }
