@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Pure fiscalization logic (routing, mapper, validation, FIRA payload, crypto) lives in `src/lib/fiskal/` with no I/O, so it is testable and the mapper can be swapped for AI.
+- PayPal base URL is defined only in `src/lib/fiskal/config.ts` so sandbox/live switching is one change.

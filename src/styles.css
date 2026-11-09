@@ -72,16 +72,26 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+@theme inline {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+}
+
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --success: oklch(0.62 0.14 155);
+  --warning: oklch(0.88 0.13 90);
+  --warning-foreground: oklch(0.35 0.08 70);
+  --radius: 0.75rem;
+  --background: oklch(0.99 0.004 200);
+  --foreground: oklch(0.22 0.03 230);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.42 0.09 200);
+  --primary-foreground: oklch(0.99 0.005 200);
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
