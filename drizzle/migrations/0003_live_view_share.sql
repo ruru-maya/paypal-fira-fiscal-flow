@@ -1,0 +1,1 @@
+ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS share_live_view boolean NOT NULL DEFAULT false;

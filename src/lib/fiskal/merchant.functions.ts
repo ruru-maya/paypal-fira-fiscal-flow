@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { scrubText } from "./crypto";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function myMerchant(supabase: any) {
@@ -57,7 +58,7 @@ export const setDemoMode = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ demo_mode: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
     const m = await requireMerchant(context.supabase);
-    const { error } = await context.supabase.from("merchants").update({ demo_mode: data.demo_mode }).eq("id", m.id);
+    const { error } = await context.supabase.from("merchants").update(data.demo_mode ? { demo_mode: true } : { demo_mode: false, share_live_view: false }).eq("id", m.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -258,4 +259,49 @@ export const shopSubscriptionPlan = createServerFn({ method: "POST" })
     const m = await shopMerchant(data.merchantId);
     const engine = await import("./engine.server");
     return { planId: await engine.ensureSubscriptionPlan(m) };
+  });
+
+export const setShareLiveView = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ share: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const m = await requireMerchant(context.supabase);
+    const { error } = await context.supabase.from("merchants").update({ share_live_view: data.share }).eq("id", m.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* ---------- Public read-only live view (demo-mode merchants who opted in). Exposes no raw payloads, no PII. ---------- */
+function payerNames(raw: any): string[] {
+  const r = raw?.resource ?? {};
+  const p = r.payer ?? r.payer_info ?? {};
+  const n = [p.name?.given_name, p.name?.surname, p.first_name, p.last_name, r.shipping?.name?.full_name, p.name?.full_name];
+  return n.filter((x): x is string => typeof x === "string" && x.trim().length > 1).flatMap((x) => x.split(/\s+/)).filter((x) => x.length > 1);
+}
+export const getLiveView = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => idSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: m } = await supabaseAdmin.from("merchants").select("id, business_name, demo_mode, share_live_view").eq("id", data.merchantId).maybeSingle();
+    if (!m || !m.demo_mode || !m.share_live_view) return { ok: false as const };
+    const { data: evs } = await supabaseAdmin
+      .from("paypal_events")
+      .select("id, event_type, route, amount, currency, received_at, simulated, verified, raw, fiscal_documents!fiscal_documents_paypal_event_id_fkey(id, kind, status, invoice_type, amount, currency, line_items, explanation_en, explanation_hr, confidence, warnings, ai_mapped, fira_invoice_number, fiscal_status, jir)")
+      .eq("merchant_id", m.id)
+      .order("received_at", { ascending: false })
+      .limit(50);
+    const events = (evs ?? []).map((e: any) => {
+      const names = payerNames(e.raw);
+      const docs = (e.fiscal_documents ?? []).map((d: any) => ({
+        ...d,
+        jir: d.jir ? "present" : null,
+        explanation_en: scrubText(d.explanation_en, names),
+        explanation_hr: scrubText(d.explanation_hr, names),
+        warnings: (d.warnings ?? []).map((w: string) => scrubText(w, names)),
+        line_items: (d.line_items ?? []).map((l: any) => ({ name: scrubText(l.name, names), quantity: l.quantity, price: l.price, taxRate: l.taxRate })),
+      }));
+      const { raw: _raw, ...rest } = e;
+      return { ...rest, fiscal_documents: docs };
+    });
+    return { ok: true as const, businessName: m.business_name, events };
   });

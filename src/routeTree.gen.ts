@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as LiveMerchantIdRouteImport } from './routes/live.$merchantId'
 import { Route as ShopMerchantIdRouteImport } from './routes/shop.$merchantId'
 import { Route as AuthenticatedReviewDocIdRouteImport } from './routes/_authenticated/review.$docId'
 import { Route as ApiPublicPaypalWebhookRouteImport } from './routes/api/public/paypal-webhook'
@@ -48,6 +49,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const LiveMerchantIdRoute = LiveMerchantIdRouteImport.update({
+  id: '/live/$merchantId',
+  path: '/live/$merchantId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShopMerchantIdRoute = ShopMerchantIdRouteImport.update({
   id: '/shop/$merchantId',
   path: '/shop/$merchantId',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/live/$merchantId': typeof LiveMerchantIdRoute
   '/shop/$merchantId': typeof ShopMerchantIdRoute
   '/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/live/$merchantId': typeof LiveMerchantIdRoute
   '/shop/$merchantId': typeof ShopMerchantIdRoute
   '/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/live/$merchantId': typeof LiveMerchantIdRoute
   '/shop/$merchantId': typeof ShopMerchantIdRoute
   '/_authenticated/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/onboarding'
     | '/settings'
+    | '/live/$merchantId'
     | '/shop/$merchantId'
     | '/review/$docId'
     | '/api/public/paypal-webhook'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/onboarding'
     | '/settings'
+    | '/live/$merchantId'
     | '/shop/$merchantId'
     | '/review/$docId'
     | '/api/public/paypal-webhook'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/onboarding'
     | '/_authenticated/settings'
+    | '/live/$merchantId'
     | '/shop/$merchantId'
     | '/_authenticated/review/$docId'
     | '/api/public/paypal-webhook'
@@ -135,6 +147,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  LiveMerchantIdRoute: typeof LiveMerchantIdRoute
   ShopMerchantIdRoute: typeof ShopMerchantIdRoute
   ApiPublicPaypalWebhookRoute: typeof ApiPublicPaypalWebhookRoute
 }
@@ -183,6 +196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/live/$merchantId': {
+      id: '/live/$merchantId'
+      path: '/live/$merchantId'
+      fullPath: '/live/$merchantId'
+      preLoaderRoute: typeof LiveMerchantIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/shop/$merchantId': {
       id: '/shop/$merchantId'
       path: '/shop/$merchantId'
@@ -228,6 +248,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  LiveMerchantIdRoute: LiveMerchantIdRoute,
   ShopMerchantIdRoute: ShopMerchantIdRoute,
   ApiPublicPaypalWebhookRoute: ApiPublicPaypalWebhookRoute,
 }

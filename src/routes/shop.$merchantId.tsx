@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
@@ -100,6 +100,7 @@ function Shop() {
         <p className="text-sm font-semibold uppercase tracking-widest text-primary">Test shop</p>
         <h1 className="mt-1 text-3xl font-bold">Varaždin Souvenirs (demo)</h1>
         <p className="mt-2 text-muted-foreground">Payments go to {cfg?.ok ? cfg.businessName : "…"}'s PayPal sandbox and become FIRA documents automatically.</p>
+        <Link to="/live/$merchantId" params={{ merchantId }} target="_blank" className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline">Watch the invoice appear live →</Link>
         {done && <p className="mt-6 rounded-lg border border-success bg-success/10 p-4 font-medium text-success">{done}</p>}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">

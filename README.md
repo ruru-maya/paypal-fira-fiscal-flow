@@ -1,29 +1,102 @@
-# Welcome to your Lovable project
+# FiskalBridge — PayPal → FIRA fiscalization connector
 
-This project was built with [Lovable](https://lovable.dev).
+Every PayPal payment becomes an invoice in [FIRA](https://app.fira.finance); every refund, chargeback or lost dispute becomes a storno. Set-and-forget for Croatian online merchants. Built for the PayPal AI Hackathon.
 
-## Build with Lovable
+- Live app: https://paypal-fira-fiscal-flow.lovable.app
+- Live demo view: https://paypal-fira-fiscal-flow.lovable.app/live/<DEMO_MERCHANT_ID>
+- Test shop: https://paypal-fira-fiscal-flow.lovable.app/shop/<DEMO_MERCHANT_ID>
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+## Why
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+Croatian law requires every sale paid by card-type methods (PayPal included) to be **fiscalized** — reported to the Tax Administration (Porezna uprava) with a JIR/ZKI code. Small webshops that sell via PayPal buttons, PayPal invoices or subscriptions usually do this by hand, copying each payment into their invoicing app, and forget refunds. FIRA fiscalizes invoices; FiskalBridge connects PayPal to it automatically. The connector **never touches the money** — it only listens to PayPal webhooks and creates documents in FIRA.
 
-## Development
+## Architecture
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+```text
+ PayPal (sandbox)                         FiskalBridge (TanStack Start on Cloudflare Workers)
+ ───────────────                         ──────────────────────────────────────────────────
+  payment / refund /    webhook    ┌─────────────────────────────────────────────┐
+  dispute event  ───────────────▶  │ /api/public/paypal-webhook                  │
+                                   │  1. verify PayPal signature                 │
+                                   │  2. de-duplicate on PayPal event id         │──▶ 200 immediately
+                                   │     (rest runs in background, waitUntil)    │
+                                   │  3. deterministic routing table             │
+                                   │  4. enrich: order items / plan / original   │◀── PayPal REST API
+                                   │  5. AI mapper (Gemini, structured output)   │◀── Lovable AI gateway
+                                   │     └─ fallback: deterministic mapper       │
+                                   │  6. code validation (cents, VAT rates)      │
+                                   │  7. confidence ≥ 0.7 & no warnings?         │
+                                   └──────────┬──────────────────────┬───────────┘
+                                         yes  │                  no  │
+                                              ▼                      ▼
+                                   FIRA /webshop/order/custom   Review queue (merchant
+                                   (PONUDA in demo mode,        edits, re-validated,
+                                    fiscal invoice when live)   approve or skip)
+                                              │
+                                              ▼
+                              Postgres (RLS) ── realtime ──▶ Dashboard / live view
 ```
 
-## Built with
+## Event table
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+| PayPal event | What we do |
+| --- | --- |
+| `PAYMENT.CAPTURE.COMPLETED` | Invoice (one-time payment) |
+| `PAYMENT.SALE.COMPLETED` | Invoice (subscription renewal) |
+| `INVOICING.INVOICE.PAID` | Invoice |
+| `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.SALE.REFUNDED` | Storno (full or partial) |
+| `PAYMENT.CAPTURE.REVERSED` | Storno (chargeback) |
+| `CUSTOMER.DISPUTE.CREATED`, `CUSTOMER.DISPUTE.UPDATED` | Watch, no document |
+| `CUSTOMER.DISPUTE.RESOLVED` | Storno if resolved in buyer's favour, otherwise no action |
+| `BILLING.SUBSCRIPTION.ACTIVATED/CANCELLED`, `PAYMENT.CAPTURE.PENDING/DENIED` | Logged, no document |
+| anything else | Logged and ignored |
+
+## Where the AI is — and where it isn't
+
+- **Rules route.** Which document (invoice / storno / none) is decided by a fixed table in `src/lib/fiskal/routing.ts`. No AI.
+- **AI maps.** Gemini turns messy PayPal item data into clean invoice lines, picks VAT rates (25 / 13 / 5, or 0 for non-VAT merchants), matches partial refunds to original lines, flags cross-border/B2B cases, and writes EN + HR explanations. Structured tool output only — free text is never parsed.
+- **Code validates.** Totals must match PayPal to the cent (incl. shipping and discounts), VAT rates must be in {0, 5, 13, 25}, non-VAT merchants must be 0%. Invalid documents are never sent — there is no bypass.
+- **Humans review.** Low confidence (< 0.7) or any warning puts the document in the review queue. The merchant edits, the code re-validates, then they approve or skip with a reason.
+
+## Demo mode
+
+ON by default. In demo mode every document is sent to FIRA as a **PONUDA** (offer), which is not fiscalized — safe for testing. Stornos are sent as PONUDA with negative amounts. Turning demo mode off sends `FISKALNI_RAČUN` / `FISKALNI_STORNO_RAČUN`. The test shop, sandbox refunds, dispute simulator and public live view work only in demo mode.
+
+## Run it yourself
+
+1. Fork this repository and import it into [Lovable](https://lovable.dev) (or run it locally with `bun install && bun run dev` against your own Supabase project).
+2. Enable Lovable Cloud (or connect Supabase) and apply the SQL migrations in `drizzle/migrations/`.
+3. Add secrets:
+   - `CREDENTIALS_ENCRYPTION_KEY` — 32 random bytes, base64 (e.g. `openssl rand -base64 32`). Encrypts stored PayPal secrets and FIRA keys.
+   - `APP_PUBLIC_URL` — your published origin, e.g. `https://your-app.lovable.app`. Webhook URLs are built from it so PayPal can reach them without login.
+   - AI: uses the Lovable AI gateway (`LOVABLE_API_KEY`, provided by Lovable Cloud).
+4. Create a **PayPal sandbox REST app** at developer.paypal.com and copy its Client ID and Secret. The app creates the webhook for you.
+5. In **FIRA** (Basic or Pro plan): Postavke → Webshop / ERP → add a **Custom** integration, copy the API key, enable "Dozvoli dohvat podataka".
+6. Sign up in the app, complete the three onboarding steps, then open your test shop from the dashboard.
+
+## Tech stack
+
+TanStack Start (React 19, Vite 7) on Cloudflare Workers · Tailwind CSS v4 + shadcn/ui · Postgres with row-level security and realtime (Lovable Cloud / Supabase) · PayPal REST APIs (Orders, Subscriptions, Webhooks, Refunds) and JS SDK · FIRA Webshop/ERP API v1.5.1 · Gemini via the Lovable AI gateway · Vitest.
+
+## Security notes
+
+- PayPal secret and FIRA key are AES-GCM encrypted in a table with no browser access; the UI only shows the last 4 characters.
+- Every table has row-level security; merchants only read their own rows. Browser users can update only their business settings columns.
+- Webhooks are accepted only with a valid PayPal signature. Simulator events (which can't be signed) are accepted only for demo-mode merchants holding a one-time nonce that expires after 5 minutes.
+- Public pages (test shop, live view) work only for demo-mode merchants; the shop exposes only the public PayPal client id; the live view is opt-in, has no raw payloads, and masks names and e-mails.
+- PayPal sandbox only; the base URL lives in one constant (`src/lib/fiskal/config.ts`).
+
+## AI tools used
+
+- **In the product:** Google Gemini (`google/gemini-3.8-flash`) via the Lovable AI gateway, for invoice line mapping and explanations.
+- **For building:** the Lovable agent and Anthropic Claude.
+
+## License
+
+Copyright (C) 2026 Rusalka Majer, 3LB savjetovanje i usluge
+
+Licensed under the GNU Affero General Public License v3.0 — see [LICENSE](./LICENSE).
+
+## Trademarks
+
+PayPal is a trademark of PayPal, Inc. FIRA is a trademark of its respective owner. This project is not affiliated with, endorsed by, or sponsored by PayPal or FIRA.

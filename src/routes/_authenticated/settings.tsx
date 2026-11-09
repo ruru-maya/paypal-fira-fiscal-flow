@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { BusinessForm, FiraForm, PaypalForm, WebhookUrl } from "@/components/fiskal/forms";
 import { merchantQuery } from "@/components/fiskal/shared";
-import { reregisterWebhook, setDemoMode } from "@/lib/fiskal/merchant.functions";
+import { reregisterWebhook, setDemoMode, setShareLiveView } from "@/lib/fiskal/merchant.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Settings — FiskalBridge" }, { name: "description", content: "Business, PayPal and FIRA settings." }] }),
@@ -19,6 +19,7 @@ function Settings() {
   const { data, isLoading } = useQuery(merchantQuery());
   const rereg = useServerFn(reregisterWebhook);
   const demo = useServerFn(setDemoMode);
+  const share = useServerFn(setShareLiveView);
   const [busy, setBusy] = useState(false);
   if (isLoading) return null;
   const m = data?.merchant;
@@ -34,6 +35,20 @@ function Settings() {
           <Switch checked={m.demo_mode} onCheckedChange={async (v) => {
             if (!v && !confirm("Turn off demo mode? New payments will create REAL fiscalized invoices.")) return;
             await demo({ data: { demo_mode: v } });
+            qc.invalidateQueries({ queryKey: ["merchant"] });
+          }} />
+        </section>
+      )}
+      {m && (
+        <section className="flex items-center justify-between gap-4 rounded-xl border p-5">
+          <div>
+            <p className="font-semibold">Share a read-only live view of my dashboard (demo mode only)</p>
+            <p className="text-sm text-muted-foreground">
+              {!m.demo_mode ? "Unavailable while demo mode is off." : m.share_live_view ? <>Anyone with the link can watch: <a className="text-primary underline" href={`/live/${m.id}`} target="_blank" rel="noreferrer">/live/{m.id}</a></> : "Off — nobody else can see your activity."}
+            </p>
+          </div>
+          <Switch disabled={!m.demo_mode} checked={m.demo_mode && m.share_live_view} onCheckedChange={async (v) => {
+            await share({ data: { share: v } });
             qc.invalidateQueries({ queryKey: ["merchant"] });
           }} />
         </section>

@@ -240,6 +240,7 @@ export type Database = {
           paypal_product_id: string | null
           paypal_webhook_id: string | null
           paypal_webhook_url: string | null
+          share_live_view: boolean
           user_id: string
         }
         Insert: {
@@ -260,6 +261,7 @@ export type Database = {
           paypal_product_id?: string | null
           paypal_webhook_id?: string | null
           paypal_webhook_url?: string | null
+          share_live_view?: boolean
           user_id: string
         }
         Update: {
@@ -280,6 +282,7 @@ export type Database = {
           paypal_product_id?: string | null
           paypal_webhook_id?: string | null
           paypal_webhook_url?: string | null
+          share_live_view?: boolean
           user_id?: string
         }
         Relationships: []

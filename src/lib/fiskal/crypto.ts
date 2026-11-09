@@ -22,3 +22,11 @@ export async function decrypt(token: string, secret: string): Promise<string> {
 
 export const mask = (v: string | null | undefined) => (v ? `••••${v.slice(-4)}` : "");
 export const maskEmails = (s: string) => s.replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+)/g, "$1***@$2");
+
+/** Masks e-mails and the given personal names (public live view). */
+export function scrubText(s: string | null | undefined, names: string[]): string | null {
+  if (!s) return s ?? null;
+  let out = s.replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "•••@•••");
+  for (const n of names) out = out.split(n).join(n[0] + "•••");
+  return out;
+}

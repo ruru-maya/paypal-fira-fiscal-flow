@@ -56,3 +56,5 @@ use the editor.
 - POST errors: 400 → needs_review with FIRA's message; 401/402 → failed with a plain message; 409 → resend same request once; 500/timeout → look up by webshopOrderId before resending; 429 → honour Retry-After (≤5s) once.
 - Store `jir`, `zki`, invoice number and fiscalization status from FIRA's response; NEUSPJEŠNO_FISKALIZIRANO still counts as sent (FIRA retries for 48 h).
 - The connector never sends e-mail; FIRA e-mails buyers when the merchant enables it.
+- Public live view `/live/$merchantId` uses an unauthenticated server fn that returns data only when the merchant is in demo mode AND opted in (`share_live_view`); it never returns raw payloads/FIRA requests and masks names/e-mails. It polls because anon users can't use RLS realtime. Turning demo mode off clears the share flag.
+- Browser users have column-level INSERT/UPDATE grants on `merchants` (business settings only); connection fields are written server-side with the admin client.
