@@ -15,6 +15,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as ShopMerchantIdRouteImport } from './routes/shop.$merchantId'
+import { Route as AuthenticatedReviewDocIdRouteImport } from './routes/_authenticated/review.$docId'
 import { Route as ApiPublicPaypalWebhookRouteImport } from './routes/api/public/paypal-webhook'
 
 const IndexRoute = IndexRouteImport.update({
@@ -46,6 +48,17 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ShopMerchantIdRoute = ShopMerchantIdRouteImport.update({
+  id: '/shop/$merchantId',
+  path: '/shop/$merchantId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedReviewDocIdRoute =
+  AuthenticatedReviewDocIdRouteImport.update({
+    id: '/review/$docId',
+    path: '/review/$docId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicPaypalWebhookRoute = ApiPublicPaypalWebhookRouteImport.update({
   id: '/api/public/paypal-webhook',
   path: '/api/public/paypal-webhook',
@@ -58,6 +71,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/shop/$merchantId': typeof ShopMerchantIdRoute
+  '/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -66,6 +81,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/shop/$merchantId': typeof ShopMerchantIdRoute
+  '/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
 }
 export interface FileRoutesById {
@@ -76,6 +93,8 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/shop/$merchantId': typeof ShopMerchantIdRoute
+  '/_authenticated/review/$docId': typeof AuthenticatedReviewDocIdRoute
   '/api/public/paypal-webhook': typeof ApiPublicPaypalWebhookRoute
 }
 export interface FileRouteTypes {
@@ -86,6 +105,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/onboarding'
     | '/settings'
+    | '/shop/$merchantId'
+    | '/review/$docId'
     | '/api/public/paypal-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -94,6 +115,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/onboarding'
     | '/settings'
+    | '/shop/$merchantId'
+    | '/review/$docId'
     | '/api/public/paypal-webhook'
   id:
     | '__root__'
@@ -103,6 +126,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/onboarding'
     | '/_authenticated/settings'
+    | '/shop/$merchantId'
+    | '/_authenticated/review/$docId'
     | '/api/public/paypal-webhook'
   fileRoutesById: FileRoutesById
 }
@@ -110,6 +135,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ShopMerchantIdRoute: typeof ShopMerchantIdRoute
   ApiPublicPaypalWebhookRoute: typeof ApiPublicPaypalWebhookRoute
 }
 
@@ -157,6 +183,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/shop/$merchantId': {
+      id: '/shop/$merchantId'
+      path: '/shop/$merchantId'
+      fullPath: '/shop/$merchantId'
+      preLoaderRoute: typeof ShopMerchantIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/review/$docId': {
+      id: '/_authenticated/review/$docId'
+      path: '/review/$docId'
+      fullPath: '/review/$docId'
+      preLoaderRoute: typeof AuthenticatedReviewDocIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/paypal-webhook': {
       id: '/api/public/paypal-webhook'
       path: '/api/public/paypal-webhook'
@@ -171,12 +211,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedReviewDocIdRoute: typeof AuthenticatedReviewDocIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedReviewDocIdRoute: AuthenticatedReviewDocIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -186,6 +228,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ShopMerchantIdRoute: ShopMerchantIdRoute,
   ApiPublicPaypalWebhookRoute: ApiPublicPaypalWebhookRoute,
 }
 export const routeTree = rootRouteImport

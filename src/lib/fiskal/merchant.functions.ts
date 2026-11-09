@@ -143,15 +143,108 @@ export const listTimeline = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+const lineSchema = z.object({
+  name: z.string().trim().min(1).max(200), description: z.string().max(500).default(""), lineItemId: z.string().max(50).default(""),
+  price: z.number().finite(), quantity: z.number().positive().max(100000), unit: z.string().max(10).default("kom"), taxRate: z.number(),
+});
+
+/** Retry (failed) or approve (needs_review). Code validation always runs again; invalid documents are never sent. */
 export const resendDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), lineItems: z.array(lineSchema).min(1).max(100).optional() }).parse(d))
+  .handler(async ({ data, context }) => {
+    // RLS read proves ownership before the privileged send.
+    const { data: doc } = await context.supabase.from("fiscal_documents").select("id, status").eq("id", data.id).maybeSingle();
+    if (!doc) throw new Error("Not found");
+    if (!["failed", "needs_review"].includes(doc.status)) throw new Error("This document cannot be sent.");
+    const engine = await import("./engine.server");
+    return engine.sendDocument(doc.id, data.lineItems);
+  });
+
+export const skipDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(500) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: doc } = await context.supabase.from("fiscal_documents").select("id, status").eq("id", data.id).maybeSingle();
+    if (!doc || !["failed", "needs_review"].includes(doc.status)) throw new Error("This document cannot be skipped.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("fiscal_documents").update({ status: "skipped", skip_reason: data.reason }).eq("id", doc.id);
+    return { ok: true };
+  });
+
+export const getDocument = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    // RLS read proves the document belongs to the caller before the privileged send.
-    const { data: doc } = await context.supabase.from("fiscal_documents").select("id, status").eq("id", data.id).maybeSingle();
+    const { data: doc } = await context.supabase.from("fiscal_documents").select("*, paypal_events!fiscal_documents_paypal_event_id_fkey(*)").eq("id", data.id).maybeSingle();
     if (!doc) throw new Error("Not found");
-    if (!["failed", "needs_review"].includes(doc.status)) throw new Error("This document cannot be resent.");
+    const { data: runs } = await context.supabase.from("ai_runs").select("*").eq("fiscal_document_id", data.id).order("created_at", { ascending: false });
+    return { doc, runs: runs ?? [] };
+  });
+
+export const refundPayment = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid(), amount: z.number().positive().max(100000).optional() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const m = await requireMerchant(context.supabase);
+    const { data: ev } = await context.supabase.from("paypal_events").select("event_type, resource_id, amount").eq("id", data.eventId).maybeSingle();
+    if (!ev || ev.event_type !== "PAYMENT.CAPTURE.COMPLETED" || !ev.resource_id) throw new Error("Only one-time payments can be refunded here.");
+    if (data.amount && data.amount > Number(ev.amount)) throw new Error("Refund is larger than the payment.");
     const engine = await import("./engine.server");
-    const ok = await engine.sendDocument(doc.id);
-    return { ok };
+    return { status: await engine.refundCapture(m.id, ev.resource_id, data.amount) };
+  });
+
+export const simulateDisputeFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    return { id: await engine.simulateDispute(m) };
+  });
+
+/* ---------- Public test-shop functions (sandbox, demo-mode merchants only; never expose secrets) ---------- */
+async function shopMerchant(merchantId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: m } = await supabaseAdmin.from("merchants").select("*").eq("id", merchantId).maybeSingle();
+  if (!m || !m.paypal_connected_at) throw new Error("This test shop is not available.");
+  if (!m.demo_mode) throw new Error("The test shop only works while demo mode is on.");
+  return m;
+}
+const idSchema = z.object({ merchantId: z.string().uuid() });
+
+export const getShopConfig = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => idSchema.parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const m = await shopMerchant(data.merchantId);
+      const engine = await import("./engine.server");
+      const c = await engine.loadCredentials(m.id);
+      return { ok: true as const, clientId: c.paypalClientId, businessName: m.business_name, products: engine.SHOP_PRODUCTS.map((p) => ({ ...p })) };
+    } catch (e) {
+      return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+export const shopCreateOrder = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => idSchema.extend({ cart: z.array(z.object({ sku: z.string().max(20), qty: z.number().int().min(1).max(20) })).min(1).max(10) }).parse(d))
+  .handler(async ({ data }) => {
+    const m = await shopMerchant(data.merchantId);
+    const engine = await import("./engine.server");
+    return { id: await engine.createShopOrder(m.id, data.cart) };
+  });
+
+export const shopCaptureOrder = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => idSchema.extend({ orderId: z.string().regex(/^[A-Z0-9]{5,40}$/) }).parse(d))
+  .handler(async ({ data }) => {
+    const m = await shopMerchant(data.merchantId);
+    const engine = await import("./engine.server");
+    return engine.captureShopOrder(m.id, data.orderId);
+  });
+
+export const shopSubscriptionPlan = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => idSchema.parse(d))
+  .handler(async ({ data }) => {
+    const m = await shopMerchant(data.merchantId);
+    const engine = await import("./engine.server");
+    return { planId: await engine.ensureSubscriptionPlan(m) };
   });

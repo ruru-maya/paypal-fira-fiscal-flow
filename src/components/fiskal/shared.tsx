@@ -11,9 +11,10 @@ const STYLES: Record<string, string> = {
   failed: "bg-destructive/10 text-destructive border-destructive/40",
   rejected: "bg-destructive/10 text-destructive border-destructive/40",
   ignored: "bg-muted text-muted-foreground border-border",
+  skipped: "bg-muted text-muted-foreground border-border",
 };
 const LABELS: Record<string, string> = {
-  sent: "Sent", watching: "Watching", needs_review: "Needs review", failed: "Failed", rejected: "Rejected", ignored: "No action",
+  sent: "Sent", watching: "Watching", needs_review: "Needs review", failed: "Failed", rejected: "Rejected", ignored: "No action", skipped: "Skipped",
 };
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STYLES[status] ?? STYLES["ignored"]}`}>{LABELS[status] ?? status}</span>;
@@ -31,6 +32,7 @@ export function whatWeDid(doc?: { kind: string; status: string; invoice_type?: s
   if (!doc) return "Nothing yet";
   if (doc.status === "rejected") return "Rejected (unverified)";
   if (doc.status === "watching") return "Watching dispute";
+  if (doc.status === "skipped") return "Skipped by you";
   if (doc.status === "ignored") return "No document needed";
   if (doc.status === "needs_review") return "Waiting for your review";
   if (doc.status === "failed") return "Sending to FIRA failed";

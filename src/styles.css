@@ -163,3 +163,9 @@
     color: var(--color-foreground);
   }
 }
+
+@keyframes row-fresh {
+  0% { background-color: color-mix(in oklab, var(--success) 25%, transparent); }
+  100% { background-color: transparent; }
+}
+.row-fresh { animation: row-fresh 3.5s ease-out; }

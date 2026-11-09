@@ -41,3 +41,11 @@ describe("crypto", () => {
   it("round-trips", async () => expect(await decrypt(await encrypt("secret-abc", "k"), "k")).toBe("secret-abc"));
   it("masks to last 4", () => expect(mask("abcdef1234")).toBe("••••1234"));
 });
+
+import { needsReview } from "@/lib/fiskal/mapper";
+describe("review gate", () => {
+  it("confidence below 0.7 needs review", () => expect(needsReview({ confidence: 0.69, warnings: [] }, [])).toBe(true));
+  it("any warning needs review", () => expect(needsReview({ confidence: 0.95, warnings: ["x"] }, [])).toBe(true));
+  it("validation error needs review", () => expect(needsReview({ confidence: 1, warnings: [] }, ["bad"])).toBe(true));
+  it("clean + confident is sent", () => expect(needsReview({ confidence: 0.7, warnings: [] }, [])).toBe(false));
+});

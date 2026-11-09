@@ -35,3 +35,8 @@ use the editor.
 - PayPal/FIRA I/O and event processing live in `src/lib/fiskal/engine.server.ts`, imported dynamically from server handlers only; the webhook is `src/routes/api/public/paypal-webhook.ts` and authenticates callers via PayPal signature verification.
 - Webhook URLs are built from env `APP_PUBLIC_URL` (fallback: request origin) so PayPal always calls a public, login-free origin.
 - Credentials table has no client grants; browser sees only last-4 hints stored on `merchants`.
+- Invoice mapping: AI mapper in `src/lib/fiskal/mapper.ai.server.ts` (structured tool output) with the deterministic mapper as fallback; code validation + `needsReview` gate always decide whether anything is sent.
+- `sendDocument` re-validates line items and refuses to send invalid documents; there is no bypass path.
+- In production `src/server.ts` short-circuits the PayPal webhook with `ctx.waitUntil` so PayPal gets 200 immediately; the route handler is the inline fallback. FIRA calls have an 8s timeout.
+- Simulated PayPal events are accepted only for demo-mode merchants holding an unexpired one-time nonce in `simulation_nonces`.
+- Public test-shop server functions work only for demo-mode merchants and expose only the public PayPal client id.

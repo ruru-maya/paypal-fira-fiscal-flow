@@ -14,8 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_runs: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          error: string | null
+          fiscal_document_id: string | null
+          id: string
+          latency_ms: number | null
+          merchant_id: string
+          model: string
+          used_fallback: boolean
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          error?: string | null
+          fiscal_document_id?: string | null
+          id?: string
+          latency_ms?: number | null
+          merchant_id: string
+          model: string
+          used_fallback?: boolean
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          error?: string | null
+          fiscal_document_id?: string | null
+          id?: string
+          latency_ms?: number | null
+          merchant_id?: string
+          model?: string
+          used_fallback?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_runs_fiscal_document_id_fkey"
+            columns: ["fiscal_document_id"]
+            isOneToOne: false
+            referencedRelation: "fiscal_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_runs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fiscal_documents: {
         Row: {
+          ai_mapped: boolean
           amount: number | null
           confidence: number | null
           created_at: string
@@ -32,10 +84,14 @@ export type Database = {
           original_document_id: string | null
           paypal_event_id: string | null
           resource_id: string | null
+          skip_reason: string | null
+          source_context: Json | null
           status: string
+          validation_errors: Json
           warnings: Json
         }
         Insert: {
+          ai_mapped?: boolean
           amount?: number | null
           confidence?: number | null
           created_at?: string
@@ -52,10 +108,14 @@ export type Database = {
           original_document_id?: string | null
           paypal_event_id?: string | null
           resource_id?: string | null
+          skip_reason?: string | null
+          source_context?: Json | null
           status: string
+          validation_errors?: Json
           warnings?: Json
         }
         Update: {
+          ai_mapped?: boolean
           amount?: number | null
           confidence?: number | null
           created_at?: string
@@ -72,7 +132,10 @@ export type Database = {
           original_document_id?: string | null
           paypal_event_id?: string | null
           resource_id?: string | null
+          skip_reason?: string | null
+          source_context?: Json | null
           status?: string
+          validation_errors?: Json
           warnings?: Json
         }
         Relationships: [
@@ -149,6 +212,8 @@ export type Database = {
           oib: string | null
           paypal_client_id_last4: string | null
           paypal_connected_at: string | null
+          paypal_plan_id: string | null
+          paypal_product_id: string | null
           paypal_webhook_id: string | null
           paypal_webhook_url: string | null
           user_id: string
@@ -167,6 +232,8 @@ export type Database = {
           oib?: string | null
           paypal_client_id_last4?: string | null
           paypal_connected_at?: string | null
+          paypal_plan_id?: string | null
+          paypal_product_id?: string | null
           paypal_webhook_id?: string | null
           paypal_webhook_url?: string | null
           user_id: string
@@ -185,6 +252,8 @@ export type Database = {
           oib?: string | null
           paypal_client_id_last4?: string | null
           paypal_connected_at?: string | null
+          paypal_plan_id?: string | null
+          paypal_product_id?: string | null
           paypal_webhook_id?: string | null
           paypal_webhook_url?: string | null
           user_id?: string
@@ -203,6 +272,7 @@ export type Database = {
           received_at: string
           resource_id: string | null
           route: string | null
+          simulated: boolean
           verified: boolean
         }
         Insert: {
@@ -216,6 +286,7 @@ export type Database = {
           received_at?: string
           resource_id?: string | null
           route?: string | null
+          simulated?: boolean
           verified?: boolean
         }
         Update: {
@@ -229,11 +300,50 @@ export type Database = {
           received_at?: string
           resource_id?: string | null
           route?: string | null
+          simulated?: boolean
           verified?: boolean
         }
         Relationships: [
           {
             foreignKeyName: "paypal_events_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      simulation_nonces: {
+        Row: {
+          created_at: string
+          event_type: string
+          expires_at: string
+          id: string
+          merchant_id: string
+          paypal_event_id: string | null
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          expires_at?: string
+          id?: string
+          merchant_id: string
+          paypal_event_id?: string | null
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          expires_at?: string
+          id?: string
+          merchant_id?: string
+          paypal_event_id?: string | null
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simulation_nonces_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"

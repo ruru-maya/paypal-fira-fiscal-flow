@@ -49,6 +49,17 @@ function isH3SwallowedErrorBody(body: string): boolean {
 // twice and renders garbled.
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // PayPal webhook fast path: store + process in the background, answer 200 immediately.
+    const waitUntil = (ctx as { waitUntil?: (p: Promise<unknown>) => void } | null)?.waitUntil;
+    if (waitUntil && request.method === "POST" && new URL(request.url).pathname === "/api/public/paypal-webhook") {
+      const body = await request.text();
+      const headers = new Headers(request.headers);
+      waitUntil.call(
+        ctx,
+        import("./lib/fiskal/engine.server").then((e) => e.handleWebhook(request.url, headers, body)),
+      );
+      return new Response("ok");
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
