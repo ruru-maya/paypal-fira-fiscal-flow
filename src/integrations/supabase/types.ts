@@ -14,7 +14,233 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      fiscal_documents: {
+        Row: {
+          amount: number | null
+          confidence: number | null
+          created_at: string
+          currency: string | null
+          explanation_en: string | null
+          explanation_hr: string | null
+          fira_request: Json | null
+          fira_response: Json | null
+          id: string
+          invoice_type: string | null
+          kind: string
+          line_items: Json
+          merchant_id: string
+          original_document_id: string | null
+          paypal_event_id: string | null
+          resource_id: string | null
+          status: string
+          warnings: Json
+        }
+        Insert: {
+          amount?: number | null
+          confidence?: number | null
+          created_at?: string
+          currency?: string | null
+          explanation_en?: string | null
+          explanation_hr?: string | null
+          fira_request?: Json | null
+          fira_response?: Json | null
+          id?: string
+          invoice_type?: string | null
+          kind: string
+          line_items?: Json
+          merchant_id: string
+          original_document_id?: string | null
+          paypal_event_id?: string | null
+          resource_id?: string | null
+          status: string
+          warnings?: Json
+        }
+        Update: {
+          amount?: number | null
+          confidence?: number | null
+          created_at?: string
+          currency?: string | null
+          explanation_en?: string | null
+          explanation_hr?: string | null
+          fira_request?: Json | null
+          fira_response?: Json | null
+          id?: string
+          invoice_type?: string | null
+          kind?: string
+          line_items?: Json
+          merchant_id?: string
+          original_document_id?: string | null
+          paypal_event_id?: string | null
+          resource_id?: string | null
+          status?: string
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fiscal_documents_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_documents_original_document_id_fkey"
+            columns: ["original_document_id"]
+            isOneToOne: false
+            referencedRelation: "fiscal_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_documents_paypal_event_id_fkey"
+            columns: ["paypal_event_id"]
+            isOneToOne: false
+            referencedRelation: "paypal_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_credentials: {
+        Row: {
+          fira_api_key: string | null
+          fira_domain: string | null
+          merchant_id: string
+          paypal_client_id: string | null
+          paypal_secret: string | null
+          updated_at: string
+        }
+        Insert: {
+          fira_api_key?: string | null
+          fira_domain?: string | null
+          merchant_id: string
+          paypal_client_id?: string | null
+          paypal_secret?: string | null
+          updated_at?: string
+        }
+        Update: {
+          fira_api_key?: string | null
+          fira_domain?: string | null
+          merchant_id?: string
+          paypal_client_id?: string | null
+          paypal_secret?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_credentials_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchants: {
+        Row: {
+          business_name: string
+          created_at: string
+          default_vat_rate: number
+          demo_mode: boolean
+          fira_connected_at: string | null
+          fira_domain: string | null
+          fira_key_last4: string | null
+          fira_payment_type: string
+          id: string
+          in_vat_system: boolean
+          oib: string | null
+          paypal_client_id_last4: string | null
+          paypal_connected_at: string | null
+          paypal_webhook_id: string | null
+          paypal_webhook_url: string | null
+          user_id: string
+        }
+        Insert: {
+          business_name?: string
+          created_at?: string
+          default_vat_rate?: number
+          demo_mode?: boolean
+          fira_connected_at?: string | null
+          fira_domain?: string | null
+          fira_key_last4?: string | null
+          fira_payment_type?: string
+          id?: string
+          in_vat_system?: boolean
+          oib?: string | null
+          paypal_client_id_last4?: string | null
+          paypal_connected_at?: string | null
+          paypal_webhook_id?: string | null
+          paypal_webhook_url?: string | null
+          user_id: string
+        }
+        Update: {
+          business_name?: string
+          created_at?: string
+          default_vat_rate?: number
+          demo_mode?: boolean
+          fira_connected_at?: string | null
+          fira_domain?: string | null
+          fira_key_last4?: string | null
+          fira_payment_type?: string
+          id?: string
+          in_vat_system?: boolean
+          oib?: string | null
+          paypal_client_id_last4?: string | null
+          paypal_connected_at?: string | null
+          paypal_webhook_id?: string | null
+          paypal_webhook_url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      paypal_events: {
+        Row: {
+          amount: number | null
+          currency: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          paypal_event_id: string
+          raw: Json | null
+          received_at: string
+          resource_id: string | null
+          route: string | null
+          verified: boolean
+        }
+        Insert: {
+          amount?: number | null
+          currency?: string | null
+          event_type: string
+          id?: string
+          merchant_id: string
+          paypal_event_id: string
+          raw?: Json | null
+          received_at?: string
+          resource_id?: string | null
+          route?: string | null
+          verified?: boolean
+        }
+        Update: {
+          amount?: number | null
+          currency?: string | null
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          paypal_event_id?: string
+          raw?: Json | null
+          received_at?: string
+          resource_id?: string | null
+          route?: string | null
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paypal_events_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

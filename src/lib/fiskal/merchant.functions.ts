@@ -1,0 +1,157 @@
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function myMerchant(supabase: any) {
+  const { data } = await supabase.from("merchants").select("*").maybeSingle();
+  return data;
+}
+async function requireMerchant(supabase: any) {
+  const m = await myMerchant(supabase);
+  if (!m) throw new Error("Please complete step 1 (your business) first.");
+  return m;
+}
+function webhookUrl(merchantId: string, base: string) {
+  return `${base}/api/public/paypal-webhook?m=${merchantId}`;
+}
+function baseUrl() {
+  const env = process.env["APP_PUBLIC_URL"];
+  if (env) return env.replace(/\/+$/, "");
+  const req = getRequest();
+  return req ? new URL(req.url).origin : "";
+}
+
+export const getMerchant = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const m = await myMerchant(context.supabase);
+    return { merchant: m, webhookUrl: m ? webhookUrl(m.id, baseUrl()) : null, usingPublicUrl: !!process.env["APP_PUBLIC_URL"] };
+  });
+
+const businessSchema = z.object({
+  business_name: z.string().trim().min(1).max(200),
+  oib: z.string().trim().regex(/^\d{11}$/).or(z.literal("")).optional(),
+  in_vat_system: z.boolean(),
+  default_vat_rate: z.union([z.literal(0), z.literal(5), z.literal(13), z.literal(25)]),
+  fira_payment_type: z.enum(["KARTICA", "TRANSAKCIJSKI", "GOTOVINA"]),
+  demo_mode: z.boolean(),
+});
+
+export const saveBusiness = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => businessSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const row = { ...data, oib: data.oib || null, default_vat_rate: data.in_vat_system ? data.default_vat_rate : 0 };
+    const existing = await myMerchant(context.supabase);
+    const q = existing
+      ? context.supabase.from("merchants").update(row).eq("id", existing.id)
+      : context.supabase.from("merchants").insert({ ...row, user_id: context.userId });
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const setDemoMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ demo_mode: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const m = await requireMerchant(context.supabase);
+    const { error } = await context.supabase.from("merchants").update({ demo_mode: data.demo_mode }).eq("id", m.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const connectPaypal = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ clientId: z.string().trim().min(10).max(200), secret: z.string().trim().min(10).max(200) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    const token = await engine.paypalToken(data.clientId, data.secret);
+    const url = webhookUrl(m.id, baseUrl());
+    const webhookId = await engine.ensureWebhook(token, url);
+    await engine.saveCredentials(m.id, { paypal_client_id: data.clientId, paypal_secret: data.secret });
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("merchants").update({
+      paypal_webhook_id: webhookId, paypal_webhook_url: url, paypal_connected_at: new Date().toISOString(),
+      paypal_client_id_last4: data.clientId.slice(-4),
+    }).eq("id", m.id);
+    return { webhookId, url };
+  });
+
+export const reregisterWebhook = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    const c = await engine.loadCredentials(m.id);
+    if (!c.paypalClientId) throw new Error("Connect PayPal first.");
+    const token = await engine.paypalToken(c.paypalClientId, c.paypalSecret);
+    const url = webhookUrl(m.id, baseUrl());
+    const webhookId = await engine.ensureWebhook(token, url);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("merchants").update({ paypal_webhook_id: webhookId, paypal_webhook_url: url }).eq("id", m.id);
+    return { webhookId, url };
+  });
+
+export const connectFira = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    domain: z.string().trim().min(3).max(200).transform((s) => s.replace(/^https?:\/\//, "").replace(/\/.*$/, "")),
+    apiKey: z.string().trim().min(8).max(500),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    await engine.saveCredentials(m.id, { fira_domain: data.domain, fira_api_key: data.apiKey });
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("merchants").update({
+      fira_domain: data.domain, fira_key_last4: data.apiKey.slice(-4), fira_connected_at: new Date().toISOString(),
+    }).eq("id", m.id);
+    return { ok: true };
+  });
+
+export const sendFiraTest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    const { buildFiraPayload } = await import("./fira");
+    const c = await engine.loadCredentials(m.id);
+    if (!c.firaApiKey) throw new Error("Connect FIRA first.");
+    const rate = m.in_vat_system ? m.default_vat_rate : 0;
+    const payload = buildFiraPayload({
+      kind: "test", settings: { ...m, demo_mode: true }, orderNumber: `FB-TEST-${Date.now()}`,
+      eventType: "FISKALBRIDGE.TEST", createdAt: new Date().toISOString(), currency: "EUR",
+      lineItems: [{ name: "FiskalBridge connection test", description: "Test offer – not fiscalized", lineItemId: "test", price: 1, quantity: 1, unit: "kom", taxRate: rate }],
+    });
+    const r = await engine.postToFira(c.firaDomain, c.firaApiKey, payload);
+    return { ok: r.ok, status: r.status, body: JSON.stringify(r.body).slice(0, 500) };
+  });
+
+export const listTimeline = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("paypal_events")
+      .select("*, fiscal_documents!fiscal_documents_paypal_event_id_fkey(*)")
+      .order("received_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+export const resendDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    // RLS read proves the document belongs to the caller before the privileged send.
+    const { data: doc } = await context.supabase.from("fiscal_documents").select("id, status").eq("id", data.id).maybeSingle();
+    if (!doc) throw new Error("Not found");
+    if (!["failed", "needs_review"].includes(doc.status)) throw new Error("This document cannot be resent.");
+    const engine = await import("./engine.server");
+    const ok = await engine.sendDocument(doc.id);
+    return { ok };
+  });

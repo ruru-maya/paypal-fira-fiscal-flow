@@ -1,6 +1,8 @@
-# FiskalBridge roadmap (Phase 1)
-- [x] Core logic: event routing, deterministic mapper, validation, FIRA payload, AES-GCM crypto (+ tests)
-- [x] Landing page + design tokens
-- [ ] Enable Lovable Cloud (blocked: needs user to enable)
-- [ ] DB tables + RLS, auth, onboarding wizard, paypal/fira connect, webhook route, dashboard, settings
-- [ ] CREDENTIALS_ENCRYPTION_KEY secret
+# FiskalBridge roadmap
+## Phase 1
+- [x] Core logic + tests
+- [x] DB + RLS, auth, onboarding, PayPal/FIRA connect, webhook, dashboard, settings
+- [x] Encryption key secret
+- [ ] Publish + set APP_PUBLIC_URL
+## Phase 2
+- [ ] AI mapper, review queue, sandbox test shop

@@ -32,3 +32,6 @@ use the editor.
 ## Project rules
 - Pure fiscalization logic (routing, mapper, validation, FIRA payload, crypto) lives in `src/lib/fiskal/` with no I/O, so it is testable and the mapper can be swapped for AI.
 - PayPal base URL is defined only in `src/lib/fiskal/config.ts` so sandbox/live switching is one change.
+- PayPal/FIRA I/O and event processing live in `src/lib/fiskal/engine.server.ts`, imported dynamically from server handlers only; the webhook is `src/routes/api/public/paypal-webhook.ts` and authenticates callers via PayPal signature verification.
+- Webhook URLs are built from env `APP_PUBLIC_URL` (fallback: request origin) so PayPal always calls a public, login-free origin.
+- Credentials table has no client grants; browser sees only last-4 hints stored on `merchants`.

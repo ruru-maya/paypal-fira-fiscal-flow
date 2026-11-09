@@ -22,8 +22,8 @@ export interface PaymentDetails {
   amount: number; // signed: negative for storno
   currency: string;
   resourceId: string;
-  itemName?: string;
-  planName?: string;
+  itemName?: string | undefined;
+  planName?: string | undefined;
 }
 
 // Swappable mapper interface — Phase 2 replaces this with an AI-backed implementation.

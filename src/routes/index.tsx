@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { EVENT_GROUPS_PLAIN } from "@/lib/fiskal/routing";
 
 export const Route = createFileRoute("/")({
@@ -26,6 +27,10 @@ function Index() {
         Connect PayPal and FIRA once. Every payment becomes an invoice, every refund or chargeback a storno —
         automatically. We never touch your money.
       </p>
+      <div className="mt-8 flex gap-3">
+        <Button asChild size="lg"><Link to="/auth">Get started</Link></Button>
+        <Button asChild size="lg" variant="outline"><Link to="/dashboard">Dashboard</Link></Button>
+      </div>
       <ul className="mt-10 grid gap-3 sm:grid-cols-2">
         {EVENT_GROUPS_PLAIN.map((e) => (
           <li key={e} className="flex items-center gap-3 rounded-lg border bg-card p-4 text-foreground">

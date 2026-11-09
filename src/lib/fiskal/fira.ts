@@ -18,7 +18,7 @@ export function buildFiraPayload(args: {
   createdAt: string;
   currency: string;
   lineItems: LineItem[];
-  payer?: Payer;
+  payer?: Payer | undefined;
 }) {
   const r2 = (n: number) => Math.round(n * 100) / 100;
   const brutto = r2(args.lineItems.reduce((s, l) => s + l.price * l.quantity, 0));
