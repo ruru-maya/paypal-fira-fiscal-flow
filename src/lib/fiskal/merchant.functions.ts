@@ -35,7 +35,6 @@ const businessSchema = z.object({
   oib: z.string().trim().regex(/^\d{11}$/).or(z.literal("")).optional(),
   in_vat_system: z.boolean(),
   default_vat_rate: z.union([z.literal(0), z.literal(5), z.literal(13), z.literal(25)]),
-  fira_payment_type: z.enum(["KARTICA", "TRANSAKCIJSKI", "GOTOVINA"]),
   demo_mode: z.boolean(),
 });
 
@@ -43,7 +42,7 @@ export const saveBusiness = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => businessSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const row = { ...data, oib: data.oib || null, default_vat_rate: data.in_vat_system ? data.default_vat_rate : 0 };
+    const row = { ...data, fira_payment_type: "KARTICA", oib: data.oib || null, default_vat_rate: data.in_vat_system ? data.default_vat_rate : 0 };
     const existing = await myMerchant(context.supabase);
     const q = existing
       ? context.supabase.from("merchants").update(row).eq("id", existing.id)
@@ -99,18 +98,30 @@ export const reregisterWebhook = createServerFn({ method: "POST" })
 export const connectFira = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
-    domain: z.string().trim().min(3).max(200).transform((s) => s.replace(/^https?:\/\//, "").replace(/\/.*$/, "")),
+    domain: z.string().trim().max(200).transform((s) => s.replace(/^https?:\/\//, "").replace(/\/.*$/, "")).optional().default(""),
     apiKey: z.string().trim().min(8).max(500),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const m = await requireMerchant(context.supabase);
     const engine = await import("./engine.server");
+    const test = await engine.testFiraConnection(data.domain, data.apiKey);
+    if (test.status === 401 || test.status === 402) throw new Error(test.message);
     await engine.saveCredentials(m.id, { fira_domain: data.domain, fira_api_key: data.apiKey });
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("merchants").update({
-      fira_domain: data.domain, fira_key_last4: data.apiKey.slice(-4), fira_connected_at: new Date().toISOString(),
+      fira_domain: data.domain || null, fira_key_last4: data.apiKey.slice(-4), fira_connected_at: new Date().toISOString(),
     }).eq("id", m.id);
-    return { ok: true };
+    return { ok: true, test };
+  });
+
+export const testFira = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const m = await requireMerchant(context.supabase);
+    const engine = await import("./engine.server");
+    const c = await engine.loadCredentials(m.id);
+    if (!c.firaApiKey) throw new Error("Connect FIRA first.");
+    return engine.testFiraConnection(c.firaDomain, c.firaApiKey);
   });
 
 export const sendFiraTest = createServerFn({ method: "POST" })
@@ -123,7 +134,7 @@ export const sendFiraTest = createServerFn({ method: "POST" })
     if (!c.firaApiKey) throw new Error("Connect FIRA first.");
     const rate = m.in_vat_system ? m.default_vat_rate : 0;
     const payload = buildFiraPayload({
-      kind: "test", settings: { ...m, demo_mode: true }, orderNumber: `FB-TEST-${Date.now()}`,
+      kind: "test", settings: { ...m, demo_mode: true }, webshopOrderId: Date.now() /* test offer only, never fiscal */, orderNumber: `FB-TEST-${Date.now()}`,
       eventType: "FISKALBRIDGE.TEST", createdAt: new Date().toISOString(), currency: "EUR",
       lineItems: [{ name: "FiskalBridge connection test", description: "Test offer – not fiscalized", lineItemId: "test", price: 1, quantity: 1, unit: "kom", taxRate: rate }],
     });

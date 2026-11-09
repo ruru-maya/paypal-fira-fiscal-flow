@@ -6,7 +6,7 @@ import { routeEvent, SUBSCRIBED_EVENTS } from "./routing";
 import { needsReview, type LineItem, type PaymentDetails, type SourceItem } from "./mapper";
 import { aiMapToInvoice, AI_MODEL } from "./mapper.ai.server";
 import { validateInvoice } from "./validate";
-import { buildFiraPayload, type Payer } from "./fira";
+import { buildFiraPayload, extractFiscal, invoiceTypeFor, type Payer } from "./fira";
 
 // Swap point for Phase 2 (AI mapper).
 const FIRA_TIMEOUT_MS = 8000;
@@ -83,22 +83,42 @@ export async function loadCredentials(merchantId: string) {
   };
 }
 
-export async function postToFira(domain: string, apiKey: string, payload: Json) {
+const FIRA_BASE = "https://app.fira.finance/api/v1/webshop";
+const firaHeaders = (apiKey: string, domain?: string) => {
+  const h: Record<string, string> = { "Content-Type": "application/json", "FIRA-Api-Key": apiKey };
+  if (domain) h["X-Webshop-Domain"] = domain;
+  return h;
+};
+
+async function firaFetch(url: string, init: RequestInit) {
   try {
-    const res = await fetch(FIRA_API_URL, {
-      signal: AbortSignal.timeout(FIRA_TIMEOUT_MS),
-      method: "POST",
-      headers: { "Content-Type": "application/json", "FIRA-Api-Key": apiKey, "X-Webshop-Domain": domain },
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(FIRA_TIMEOUT_MS) });
     const text = await res.text();
     let body: Json = text;
     try { body = JSON.parse(text); } catch { /* keep text */ }
-    return { ok: res.ok, status: res.status, body };
+    return { ok: res.ok, status: res.status, body, retryAfter: Number(res.headers.get("retry-after") ?? 0) };
   } catch (e) {
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-    return { ok: false, status: 0, body: { error: timedOut ? `FIRA did not answer within ${FIRA_TIMEOUT_MS / 1000}s (retryable)` : String(e) } };
+    return { ok: false, status: 0, body: { error: timedOut ? `FIRA did not answer within ${FIRA_TIMEOUT_MS / 1000}s (retryable)` : String(e) }, retryAfter: 0 };
   }
+}
+
+export const postToFira = (domain: string, apiKey: string, payload: Json) =>
+  firaFetch(FIRA_API_URL, { method: "POST", headers: firaHeaders(apiKey, domain), body: JSON.stringify(payload) });
+
+export const getFiraInvoices = (domain: string, apiKey: string, query = "") =>
+  firaFetch(`${FIRA_BASE}/erp/invoices${query}`, { method: "GET", headers: firaHeaders(apiKey, domain) });
+
+/** Checks the FIRA key without creating anything. */
+export async function testFiraConnection(domain: string, apiKey: string) {
+  const r = await getFiraInvoices(domain, apiKey);
+  const msg: Record<number, string> = {
+    200: "Connection works.",
+    403: "Key works, but \"Dozvoli dohvat podataka\" is off in FIRA. Switch it on so we can check invoice status.",
+    401: "FIRA does not recognise this key. Copy it again from Postavke → Webshop / ERP.",
+    402: "Your FIRA subscription is unpaid.",
+  };
+  return { ok: r.status === 200 || r.status === 403, status: r.status, message: msg[r.status] ?? `FIRA answered ${r.status}.` };
 }
 
 export function settingsOf(m: Json): MerchantSettings {
@@ -106,21 +126,40 @@ export function settingsOf(m: Json): MerchantSettings {
     business_name: m.business_name,
     in_vat_system: m.in_vat_system,
     default_vat_rate: m.default_vat_rate as VatRate,
-    fira_payment_type: m.fira_payment_type as FiraPaymentType,
+    fira_payment_type: "KARTICA" as FiraPaymentType,
     demo_mode: m.demo_mode,
   };
 }
 
 /** Validates the document's current line items with code; returns errors (empty = valid). */
 export function validateDoc(doc: Json, merchant: Json, lineItems: LineItem[]): string[] {
-  const settings = settingsOf(merchant);
-  return validateInvoice(lineItems, { amount: Number(doc.amount), currency: doc.currency ?? "EUR" }, "EUR", settings);
+  return validateInvoice(lineItems, { amount: Number(doc.amount), currency: doc.currency ?? "EUR" }, "EUR", settingsOf(merchant),
+    { shipping: Number(doc.shipping ?? 0), discount: Number(doc.discount ?? 0) });
 }
 
-/** Sends a document to FIRA. Never sends invalid documents. */
+export async function buildPayloadForDoc(doc: Json, merchant: Json, lines: LineItem[]) {
+  const ctx = (doc.source_context ?? {}) as Json;
+  let originalInvoiceNumber: string | undefined;
+  if (doc.original_document_id) {
+    const { data: o } = await supabaseAdmin.from("fiscal_documents").select("fira_invoice_number").eq("id", doc.original_document_id).maybeSingle();
+    originalInvoiceNumber = o?.fira_invoice_number ?? undefined;
+  }
+  return buildFiraPayload({
+    kind: doc.kind === "storno" ? "storno" : "invoice", settings: settingsOf(merchant),
+    webshopOrderId: Number(doc.fira_order_id), orderNumber: ctx.orderNumber ?? doc.resource_id ?? String(doc.fira_order_id),
+    eventType: ctx.eventType ?? "", createdAt: ctx.createdAt ?? undefined, currency: doc.currency ?? "EUR",
+    lineItems: lines, payer: ctx.payer ?? undefined, shipping: Number(doc.shipping ?? 0), discount: Number(doc.discount ?? 0),
+    originalInvoiceNumber,
+  });
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const bodyText = (b: Json) => (typeof b === "string" ? b : JSON.stringify(b)).slice(0, 1000);
+
+/** Sends a document to FIRA. Never sends invalid documents. Same webshopOrderId on every retry. */
 export async function sendDocument(docId: string, editedLines?: LineItem[]) {
   const { data: doc } = await supabaseAdmin.from("fiscal_documents").select("*").eq("id", docId).single();
-  if (!doc?.fira_request) throw new Error("Document has nothing to send");
+  if (!doc || doc.kind === "none") throw new Error("Document has nothing to send");
   const { data: merchant } = await supabaseAdmin.from("merchants").select("*").eq("id", doc.merchant_id).single();
   const lines = (editedLines ?? (doc.line_items as Json)) as LineItem[];
   const errors = validateDoc(doc, merchant, lines);
@@ -130,19 +169,40 @@ export async function sendDocument(docId: string, editedLines?: LineItem[]) {
   }
   const creds = await loadCredentials(doc.merchant_id);
   if (!creds.firaApiKey) throw new Error("FIRA is not connected");
-  const req = doc.fira_request as Json;
-  const settings = settingsOf(merchant);
-  const payload = buildFiraPayload({
-    kind: doc.kind === "storno" ? "storno" : "invoice", settings, orderNumber: req.webshopOrderNumber,
-    eventType: String(req.internalNote ?? "").replace(/^PayPal (\S+):.*/, "$1"), createdAt: req.createdAt,
-    currency: req.currency, lineItems: lines, payer: req.billingAddress,
-  });
-  const r = await postToFira(creds.firaDomain, creds.firaApiKey, payload);
+  const payload = await buildPayloadForDoc(doc, merchant, lines);
+
+  let r = await postToFira(creds.firaDomain, creds.firaApiKey, payload);
+  if (r.status === 409) r = await postToFira(creds.firaDomain, creds.firaApiKey, payload);
+  if (r.status === 429) {
+    const wait = Math.min(Math.max(r.retryAfter, 1), 5) * 1000;
+    if (r.retryAfter <= 5) { await sleep(wait); r = await postToFira(creds.firaDomain, creds.firaApiKey, payload); }
+  }
+  if (r.status === 500 || r.status === 0) {
+    const look = await getFiraInvoices(creds.firaDomain, creds.firaApiKey, `?webshopOrderId=${payload["webshopOrderId"]}`);
+    const list = Array.isArray(look.body) ? look.body : look.body?.content ?? look.body?.data ?? look.body?.invoices ?? [];
+    if (look.ok && list.length) r = { ok: true, status: 200, body: list[0], retryAfter: 0 };
+    else if (r.status === 500) r = await postToFira(creds.firaDomain, creds.firaApiKey, payload);
+  }
+
+  const text = bodyText(r.body);
+  const already = r.status === 400 && /already created/i.test(text);
+  let status: string;
+  let firaError: string | null = null;
+  if (r.ok || already) status = "sent";
+  else if (r.status === 400) { status = "needs_review"; firaError = `FIRA rejected the document: ${text}`; }
+  else if (r.status === 401) { status = "failed"; firaError = "FIRA key invalid — reconnect FIRA in Settings."; }
+  else if (r.status === 402) { status = "failed"; firaError = "Your FIRA subscription is unpaid."; }
+  else { status = "failed"; firaError = `FIRA error ${r.status || "(no answer)"}: ${text}`; }
+
+  const fiscal = r.ok ? extractFiscal(r.body) : { jir: null, zki: null, invoiceNumber: null, fiscalStatus: already ? "ALREADY_CREATED" : null };
   await supabaseAdmin.from("fiscal_documents").update({
-    status: r.ok ? "sent" : "failed", invoice_type: payload.invoiceType, line_items: lines as Json, validation_errors: [],
-    fira_request: payload as Json, fira_response: { status: r.status, body: r.body },
+    status, invoice_type: String(payload["invoiceType"]), line_items: lines as Json, validation_errors: [],
+    fira_request: payload as Json, fira_response: { status: r.status, body: r.body }, fira_error: firaError,
+    ...(fiscal.jir ? { jir: fiscal.jir } : {}), ...(fiscal.zki ? { zki: fiscal.zki } : {}),
+    ...(fiscal.invoiceNumber ? { fira_invoice_number: fiscal.invoiceNumber } : {}),
+    ...(fiscal.fiscalStatus ? { fiscal_status: fiscal.fiscalStatus } : {}),
   }).eq("id", docId);
-  return { ok: r.ok, errors: [] as string[] };
+  return { ok: status === "sent", errors: [] as string[], firaError };
 }
 
 export async function verifySignature(merchant: Json, headers: Headers, event: Json): Promise<boolean> {
@@ -275,6 +335,8 @@ export async function processEvent(merchant: Json, event: Json, verified: boolea
     let originalLines: LineItem[] | undefined;
     let originalTotal: number | undefined;
     let orderNumber = resourceId;
+    let shipping = 0;
+    let discount = 0;
     const creds = await loadCredentials(merchant.id);
 
     try {
@@ -285,6 +347,8 @@ export async function processEvent(merchant: Json, event: Json, verified: boolea
         const pu = o.body.purchase_units?.[0];
         items = pu?.items?.map((i: Json) => ({ name: i.name, description: i.description, quantity: Number(i.quantity) || 1, unitPrice: Number(i.unit_amount?.value ?? 0), sku: i.sku }));
         itemName = pu?.description;
+        shipping = Number(pu?.amount?.breakdown?.shipping?.value ?? 0);
+        discount = Number(pu?.amount?.breakdown?.discount?.value ?? 0);
         const p = o.body.payer ?? o.body.payment_source?.paypal;
         payer = { name: [p?.name?.given_name, p?.name?.surname].filter(Boolean).join(" "), email: p?.email_address, country: p?.address?.country_code };
         company = p?.business_name ?? pu?.shipping?.name?.full_name?.match?.(/d\.o\.o\.|GmbH|Ltd|S\.r\.l|SAS|B\.V\./i) ? pu.shipping.name.full_name : undefined;
@@ -328,33 +392,41 @@ export async function processEvent(merchant: Json, event: Json, verified: boolea
     }
 
     const signed = amount == null ? 0 : kind === "storno" ? -Math.abs(amount) : amount;
+    if (kind === "storno") { shipping = 0; discount = 0; }
+    const linesTarget = Math.round((signed - shipping + discount) * 100) / 100;
     const docCurrency = currency ?? "EUR";
+    if (payer) { payer.company = company; payer.vatNumber = vatId; }
     const details: PaymentDetails = {
-      amount: signed, currency: docCurrency, resourceId: orderNumber, route, itemName, planName, items,
+      amount: linesTarget, currency: docCurrency, resourceId: orderNumber, route, itemName, planName, items,
       payerCountry: payer?.country, payerIsBusiness: !!(company || vatId), payerCompany: company, payerVatId: vatId,
       originalLines, originalTotal,
     };
     const ai = await aiMapToInvoice(event, details, settings);
     const mapped = ai.mapped;
+    // PayPal SKU → FIRA productCode when lines map 1:1 to PayPal items.
+    if (kind === "invoice" && items && items.length === mapped.lineItems.length)
+      mapped.lineItems.forEach((l, i) => { if (items![i]?.sku) l.productCode = items![i]!.sku; });
     // Code-side cross-border safety net (never applies a regime, only warns).
     if (payer?.country && !isEu(payer.country) && !mapped.warnings.some((w) => /OSS|reverse|outside/i.test(w)))
       mapped.warnings.push(`Customer is outside the EU (${payer.country}) — export/OSS rules may apply; confirm with your accountant.`);
-    const errors = amount == null ? ["PayPal event has no amount."] : validateInvoice(mapped.lineItems, { amount: signed, currency: docCurrency }, "EUR", settings);
+    const errors = amount == null ? ["PayPal event has no amount."] : validateInvoice(mapped.lineItems, { amount: signed, currency: docCurrency }, "EUR", settings, { shipping, discount });
     const allWarnings = [...warnings, ...mapped.warnings];
     const review = needsReview({ confidence: mapped.confidence, warnings: allWarnings }, errors);
-    const payload = buildFiraPayload({
-      kind, settings, orderNumber, eventType: event.event_type, createdAt: event.create_time ?? new Date().toISOString(),
-      currency: docCurrency, lineItems: mapped.lineItems, payer,
-    });
 
     const { data: doc } = await supabaseAdmin.from("fiscal_documents").insert({
-      ...base, amount: signed, currency: docCurrency, kind, invoice_type: payload.invoiceType, line_items: mapped.lineItems as Json,
+      ...base, amount: signed, currency: docCurrency, kind, invoice_type: invoiceTypeFor(kind, settings.demo_mode), line_items: mapped.lineItems as Json,
       explanation_en: mapped.explanation_en, explanation_hr: mapped.explanation_hr, confidence: mapped.confidence,
       warnings: allWarnings, validation_errors: errors, status: review ? "needs_review" : "failed",
-      ai_mapped: !ai.usedFallback, fira_request: payload as Json, original_document_id: originalDocId,
-      source_context: { items: items ?? null, itemName: itemName ?? null, planName: planName ?? null, payer: payer ?? null, company: company ?? null, vatId: vatId ?? null, originalLines: originalLines ?? null } as Json,
-    }).select("id").single();
+      ai_mapped: !ai.usedFallback, original_document_id: originalDocId, shipping, discount,
+      source_context: {
+        items: items ?? null, itemName: itemName ?? null, planName: planName ?? null, payer: payer ?? null, company: company ?? null,
+        vatId: vatId ?? null, originalLines: originalLines ?? null, orderNumber, eventType: event.event_type, createdAt: event.create_time ?? null,
+      } as Json,
+    }).select("*").single();
     if (doc) {
+      // Store the exact payload preview (with its stable webshopOrderId) for transparency.
+      const preview = await buildPayloadForDoc(doc, merchant, mapped.lineItems);
+      await supabaseAdmin.from("fiscal_documents").update({ fira_request: preview as Json }).eq("id", doc.id);
       await supabaseAdmin.from("ai_runs").insert({
         merchant_id: merchant.id, fiscal_document_id: doc.id, model: AI_MODEL, latency_ms: ai.latencyMs,
         confidence: mapped.confidence, used_fallback: ai.usedFallback, error: ai.error ?? null,

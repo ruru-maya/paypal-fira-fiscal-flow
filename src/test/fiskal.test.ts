@@ -49,3 +49,73 @@ describe("review gate", () => {
   it("validation error needs review", () => expect(needsReview({ confidence: 1, warnings: [] }, ["bad"])).toBe(true));
   it("clean + confident is sent", () => expect(needsReview({ confidence: 0.7, warnings: [] }, [])).toBe(false));
 });
+
+import { buildFiraPayload, toFiraRate, zagrebLocal } from "@/lib/fiskal/fira";
+const vat: MerchantSettings = { ...s, in_vat_system: true, default_vat_rate: 25, demo_mode: false };
+const L = (price: number, quantity: number, taxRate: number, extra: object = {}) => ({ name: "x", description: "", lineItemId: "1", price, quantity, unit: "kom", taxRate, ...extra });
+const base = { webshopOrderId: 100001, orderNumber: "CAP-1", eventType: "PAYMENT.CAPTURE.COMPLETED", currency: "EUR" };
+
+describe("FIRA payload (API v1.5.1)", () => {
+  it("taxRate is a decimal fraction", () => {
+    expect([25, 13, 5, 0].map(toFiraRate)).toEqual([0.25, 0.13, 0.05, 0]);
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(18, 2, 25), L(24, 1, 5)] });
+    expect(p.lineItems.map((l: any) => l.taxRate)).toEqual([0.25, 0.05]);
+  });
+  it("non-VAT merchant: 0% lines carry OSLOBODENO + CLANAK_90 and taxValue 0", () => {
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: s, lineItems: [L(10, 1, 0)] });
+    expect(p.lineItems[0].productTaxCategory).toBe("OSLOBODENO");
+    expect(p.lineItems[0].taxExemptionReason).toBe("CLANAK_90");
+    expect(p.taxValue).toBe(0);
+    expect(p.brutto).toBe(10);
+  });
+  it("brutto/netto/taxValue match per-line rounded sums", () => {
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(18, 2, 25), L(24, 1, 5)] });
+    expect(p.brutto).toBe(60);
+    expect(p.netto).toBe(28.8 + 22.86);
+    expect(Math.round((p.brutto - p.netto) * 100) / 100).toBe(p.taxValue);
+  });
+  it("uses the stable webshopOrderId and puts the PayPal id in webshopOrderNumber", () => {
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)] });
+    expect(p.webshopOrderId).toBe(100001);
+    expect(p.webshopOrderNumber).toBe("CAP-1");
+  });
+  it("paymentType is always KARTICA with PayPal gateway, no prepaidAmount", () => {
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: { ...vat, fira_payment_type: "GOTOVINA" }, lineItems: [L(10, 1, 25)] });
+    expect(p.paymentType).toBe("KARTICA");
+    expect(p.paymentGatewayCode).toBe("paypal");
+    expect("prepaidAmount" in p).toBe(false);
+  });
+  it("b2bClient false for consumers, true with company/VAT id", () => {
+    const c: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], payer: { name: "Ana" } });
+    const b: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], payer: { company: "X d.o.o.", vatNumber: "HR123" } });
+    expect(c.billingAddress.b2bClient).toBe(false);
+    expect(b.billingAddress.b2bClient).toBe(true);
+  });
+  it("shipping → totalShipping, discount → discounts, sku → productCode", () => {
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(18, 1, 25, { productCode: "MUG-01" })], shipping: 5, discount: 2 });
+    expect(p.totalShipping).toBe(5);
+    expect(p.discounts[0].amount).toBe(2);
+    expect(p.lineItems[0].productCode).toBe("MUG-01");
+    expect(p.brutto).toBe(21);
+  });
+  it("validation counts shipping and discounts against the PayPal amount", () => {
+    expect(validateInvoice([L(18, 1, 25)], { amount: 21, currency: "EUR" }, "EUR", vat, { shipping: 5, discount: 2 })).toEqual([]);
+    expect(validateInvoice([L(18, 1, 25)], { amount: 18, currency: "EUR" }, "EUR", vat, { shipping: 5, discount: 2 }).length).toBe(1);
+  });
+  it("storno: negative amounts, original invoice number in termsHR; demo stays PONUDA", () => {
+    const live: any = buildFiraPayload({ ...base, kind: "storno", settings: vat, lineItems: [L(-10, 1, 25)], originalInvoiceNumber: "12-1-1" });
+    expect(live.invoiceType).toBe("FISKALNI_STORNO_RAČUN");
+    expect(live.brutto).toBe(-10);
+    expect(live.termsHR).toBe("Storno računa br. 12-1-1");
+    const demo: any = buildFiraPayload({ ...base, kind: "storno", settings: { ...vat, demo_mode: true }, lineItems: [L(-10, 1, 25)] });
+    expect(demo.invoiceType).toBe("PONUDA");
+  });
+  it("createdAt is Zagreb local time without zone, across DST", () => {
+    expect(zagrebLocal("2026-07-01T10:00:00Z")).toBe("2026-07-01T12:00:00"); // CEST +2
+    expect(zagrebLocal("2026-11-10T08:15:00Z")).toBe("2026-11-10T09:15:00"); // CET +1
+    expect(zagrebLocal("2026-03-29T00:30:00Z")).toBe("2026-03-29T01:30:00"); // before switch
+    expect(zagrebLocal("2026-03-29T01:30:00Z")).toBe("2026-03-29T03:30:00"); // after switch
+    const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], createdAt: "2026-11-10T08:15:00Z" });
+    expect(p.createdAt).toBe("2026-11-10T09:15:00");
+  });
+});

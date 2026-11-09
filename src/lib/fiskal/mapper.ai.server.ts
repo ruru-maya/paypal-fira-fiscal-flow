@@ -3,7 +3,7 @@ import { generateChatCompletion } from "@lovable.dev/ai-gateway";
 import type { MerchantSettings } from "./config";
 import { deterministicMapper, type LineItem, type MappedInvoice, type PaymentDetails } from "./mapper";
 
-export const AI_MODEL = "google/gemini-2.5-flash" as const;
+export const AI_MODEL = "google/gemini-3.8-flash" as const;
 const AI_TIMEOUT_MS = 12000;
 
 const TOOL = {
@@ -41,7 +41,7 @@ const TOOL = {
 
 const SYSTEM = `You map PayPal payment data into Croatian invoice line items for the FIRA invoicing app.
 Rules:
-- Sum of (price × quantity) MUST equal the given PayPal amount exactly to the cent (gross, EUR). For refunds/storno all prices are NEGATIVE and sum to the negative refunded amount.
+- Sum of (price × quantity) MUST equal the given paypal_amount (already excludes shipping and discounts) exactly to the cent (gross, EUR). For refunds/storno all prices are NEGATIVE and sum to the negative refunded amount.
 - Clean messy names (e.g. "SKU-221 HANDMADE MUG BLU x2" → name "Handmade mug, blue", quantity 2).
 - VAT: if merchant is NOT in the VAT system every taxRate is 0. Otherwise choose per line from Croatian rates: 25 standard; 13 (e.g. accommodation, some food services); 5 (e.g. books, some foods, medicines). Use the merchant default when unsure and add a warning.
 - Partial refunds: work out which original lines/quantities the refunded amount corresponds to. If no combination matches exactly, emit ONE proportional storno line and add a warning.

@@ -40,3 +40,19 @@ use the editor.
 - In production `src/server.ts` short-circuits the PayPal webhook with `ctx.waitUntil` so PayPal gets 200 immediately; the route handler is the inline fallback. FIRA calls have an 8s timeout.
 - Simulated PayPal events are accepted only for demo-mode merchants holding an unexpired one-time nonce in `simulation_nonces`.
 - Public test-shop server functions work only for demo-mode merchants and expose only the public PayPal client id.
+
+## FIRA API rules (Webshop/ERP API v1.5.1)
+- Internal VAT is a percentage (25); the FIRA payload sends a decimal fraction (0.25). Convert only in `buildFiraPayload`.
+- Non-VAT merchants: every 0% line carries `productTaxCategory: "OSLOBODENO"` + `taxExemptionReason: "CLANAK_90"`, and `taxValue` is 0.
+- `brutto`/`netto`/`taxValue` are computed from per-line amounts rounded to cents, then summed; `taxesIncluded: true` (prices are gross).
+- `webshopOrderId` is FIRA's int64 idempotency key: always the document's `fira_order_id` identity, identical on every retry, never `Date.now()` for real documents. A 400 "already created" means success. `webshopOrderNumber` holds the PayPal id.
+- `createdAt` is Europe/Zagreb local time without zone or offset (`zagrebLocal`).
+- `paymentType` is always `KARTICA` with `paymentGatewayCode: "paypal"` / `paymentGatewayName: "PayPal"`; never send `prepaidAmount`. Merchants get no payment-type choice.
+- `billingAddress.b2bClient` is sent explicitly: true only with a company or VAT id.
+- PayPal shipping → `totalShipping`, discounts → `discounts[]`, sku → line `productCode`; `lineItemId` is display only. Validation includes shipping and discounts.
+- Storno: stand-alone document with negative amounts, own `webshopOrderId`, original invoice number in `termsHR`; demo mode still sends PONUDA. FIRA never e-mails stornos.
+- Only `FIRA-Api-Key` is required; send `X-Webshop-Domain` only when the merchant set one.
+- Connection test uses `GET /api/v1/webshop/erp/invoices` (200 ok, 403 data access off, 401 bad key, 402 unpaid) and never creates documents.
+- POST errors: 400 → needs_review with FIRA's message; 401/402 → failed with a plain message; 409 → resend same request once; 500/timeout → look up by webshopOrderId before resending; 429 → honour Retry-After (≤5s) once.
+- Store `jir`, `zki`, invoice number and fiscalization status from FIRA's response; NEUSPJEŠNO_FISKALIZIRANO still counts as sent (FIRA retries for 48 h).
+- The connector never sends e-mail; FIRA e-mails buyers when the merchant enables it.

@@ -35,7 +35,8 @@ function Review() {
 
   useEffect(() => { if (data?.doc) { setLines((data.doc.line_items as any) ?? []); setErrors((data.doc.validation_errors as any) ?? []); } }, [data?.doc]);
   const target = Number(data?.doc?.amount ?? 0);
-  const total = useMemo(() => lines.reduce((s, l) => s + Math.round(Number(l.price) * 100) * Number(l.quantity), 0) / 100, [lines]);
+  const extras = Math.round((Number(data?.doc?.shipping ?? 0) - Number(data?.doc?.discount ?? 0)) * 100);
+  const total = useMemo(() => (lines.reduce((s, l) => s + Math.round(Number(l.price) * Number(l.quantity) * 100), 0) + extras) / 100, [lines, extras]);
   const matches = Math.round(total * 100) === Math.round(target * 100);
 
   if (isLoading || !data) return null;
@@ -103,7 +104,7 @@ function Review() {
           </div>
           <div className={`mt-4 flex items-center justify-between rounded-lg p-3 font-semibold ${matches ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
             <span className="flex items-center gap-2">{matches ? <CheckCircle2 className="h-5 w-5" /> : <CircleX className="h-5 w-5" />} Total {total.toFixed(2)} EUR</span>
-            <span className="text-sm font-normal">PayPal: {target.toFixed(2)}</span>
+            <span className="text-sm font-normal">PayPal: {target.toFixed(2)}{extras !== 0 && ` (incl. shipping/discount ${(extras / 100).toFixed(2)})`}</span>
           </div>
         </section>
       </div>
@@ -122,6 +123,7 @@ function Review() {
           <h2 className="mb-2 font-semibold">Why this needs review</h2>
           <ul className="space-y-1">
             {errors.map((w, i) => <li key={`e${i}`} className="text-destructive">✕ {w}</li>)}
+            {doc.fira_error && <li className="text-destructive">✕ {doc.fira_error}</li>}
             {(doc.warnings ?? []).map((w: string, i: number) => <li key={i}>⚠ {w}</li>)}
             {Number(doc.confidence) < 0.7 && <li>⚠ AI confidence is below 70%.</li>}
           </ul>
@@ -136,7 +138,7 @@ function Review() {
               const r = await send({ data: { id: doc.id, lineItems: lines } });
               if (r.errors.length) { setErrors(r.errors); toast.error("Not sent — fix the errors shown."); }
               else if (r.ok) { toast.success("Sent to FIRA"); await qc.invalidateQueries({ queryKey: ["timeline"] }); navigate({ to: "/dashboard" }); }
-              else toast.error("FIRA did not accept the document — it is marked failed and can be retried.");
+              else { toast.error(r.firaError ?? "FIRA did not accept the document."); await qc.invalidateQueries({ queryKey: ["doc", docId] }); }
             } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
           }}>Approve & send to FIRA</Button>
           <div className="flex-1 space-y-2">

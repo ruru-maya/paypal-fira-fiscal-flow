@@ -72,23 +72,31 @@ export type Database = {
           confidence: number | null
           created_at: string
           currency: string | null
+          discount: number
           explanation_en: string | null
           explanation_hr: string | null
+          fira_error: string | null
+          fira_invoice_number: string | null
+          fira_order_id: number
           fira_request: Json | null
           fira_response: Json | null
+          fiscal_status: string | null
           id: string
           invoice_type: string | null
+          jir: string | null
           kind: string
           line_items: Json
           merchant_id: string
           original_document_id: string | null
           paypal_event_id: string | null
           resource_id: string | null
+          shipping: number
           skip_reason: string | null
           source_context: Json | null
           status: string
           validation_errors: Json
           warnings: Json
+          zki: string | null
         }
         Insert: {
           ai_mapped?: boolean
@@ -96,23 +104,31 @@ export type Database = {
           confidence?: number | null
           created_at?: string
           currency?: string | null
+          discount?: number
           explanation_en?: string | null
           explanation_hr?: string | null
+          fira_error?: string | null
+          fira_invoice_number?: string | null
+          fira_order_id?: never
           fira_request?: Json | null
           fira_response?: Json | null
+          fiscal_status?: string | null
           id?: string
           invoice_type?: string | null
+          jir?: string | null
           kind: string
           line_items?: Json
           merchant_id: string
           original_document_id?: string | null
           paypal_event_id?: string | null
           resource_id?: string | null
+          shipping?: number
           skip_reason?: string | null
           source_context?: Json | null
           status: string
           validation_errors?: Json
           warnings?: Json
+          zki?: string | null
         }
         Update: {
           ai_mapped?: boolean
@@ -120,23 +136,31 @@ export type Database = {
           confidence?: number | null
           created_at?: string
           currency?: string | null
+          discount?: number
           explanation_en?: string | null
           explanation_hr?: string | null
+          fira_error?: string | null
+          fira_invoice_number?: string | null
+          fira_order_id?: never
           fira_request?: Json | null
           fira_response?: Json | null
+          fiscal_status?: string | null
           id?: string
           invoice_type?: string | null
+          jir?: string | null
           kind?: string
           line_items?: Json
           merchant_id?: string
           original_document_id?: string | null
           paypal_event_id?: string | null
           resource_id?: string | null
+          shipping?: number
           skip_reason?: string | null
           source_context?: Json | null
           status?: string
           validation_errors?: Json
           warnings?: Json
+          zki?: string | null
         }
         Relationships: [
           {

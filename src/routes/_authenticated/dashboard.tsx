@@ -128,7 +128,7 @@ function Dashboard() {
                     )}
                   </span>
                   <span className="w-28 text-right tabular-nums">{ev.amount != null ? `${Number(doc?.amount ?? ev.amount).toFixed(2)} ${ev.currency ?? ""}` : "—"}</span>
-                  <span className="hidden w-52 text-sm text-muted-foreground sm:block">{whatWeDid(doc)}</span>
+                  <span className="hidden w-52 text-sm text-muted-foreground sm:block">{whatWeDid(doc)}{doc?.fira_invoice_number && <span className="block text-xs">No. {doc.fira_invoice_number}</span>}</span>
                   {doc && <StatusBadge status={doc.status} />}
                 </button>
                 {doc?.status === "needs_review" && <Button size="sm" asChild><Link to="/review/$docId" params={{ docId: doc.id }}>Review</Link></Button>}
@@ -200,6 +200,8 @@ function Detail({ ev, onClose }: { ev: any; onClose: () => void }) {
             <div className="space-y-6 px-4 pb-8 text-sm">
               <div className="flex items-center gap-3">{doc && <StatusBadge status={doc.status} />}<span>{whatWeDid(doc)}</span></div>
               <p className="text-xs text-muted-foreground">{ev.event_type} · {ev.resource_id} · {ev.simulated ? "Simulated (demo)" : ev.verified ? "Signature verified" : "Not verified"}</p>
+              <FiscalResult doc={doc} />
+              {doc?.fira_error && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">{doc.fira_error}</p>}
               {doc?.skip_reason && <p className="rounded-lg bg-muted p-3">Skipped: {doc.skip_reason}</p>}
               {doc?.explanation_en && (
                 <div className="space-y-2 rounded-lg bg-muted p-4">
@@ -228,7 +230,7 @@ function Detail({ ev, onClose }: { ev: any; onClose: () => void }) {
                   try {
                     const r = await resend({ data: { id: doc.id } });
                     if (r.errors.length) toast.error(`Not sent — ${r.errors.join(" ")}`);
-                    else r.ok ? toast.success("Sent to FIRA") : toast.error("FIRA did not accept it — see response below");
+                    else r.ok ? toast.success("Sent to FIRA") : toast.error(r.firaError ?? "FIRA did not accept it");
                     await qc.invalidateQueries({ queryKey: ["timeline"] });
                     onClose();
                   } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
@@ -251,5 +253,22 @@ function Raw({ title, value }: { title: string; value: unknown }) {
       <summary className="flex cursor-pointer items-center justify-between px-3 py-2 font-medium">{title}<ChevronDown className="h-4 w-4 transition group-open:rotate-180" /></summary>
       <pre className="max-h-80 overflow-auto bg-muted p-3 text-xs">{maskEmails(JSON.stringify(value, null, 2))}</pre>
     </details>
+  );
+}
+
+function FiscalResult({ doc }: { doc: any }) {
+  if (!doc || doc.status !== "sent") return null;
+  const failedFisc = /NEUSPJE/i.test(doc.fiscal_status ?? "");
+  const fiscalized = !!doc.jir && /FISKALIZIRANO/i.test(doc.fiscal_status ?? "") && !failedFisc;
+  return (
+    <div className={`space-y-1 rounded-lg border p-3 ${failedFisc ? "border-warning bg-warning/15" : "bg-card"}`}>
+      {fiscalized && <p className="font-semibold text-success">Fiscalized ✓</p>}
+      {failedFisc && <p className="font-semibold text-warning-foreground">Tax office unreachable — FIRA will retry fiscalization for 48 h</p>}
+      {doc.fira_invoice_number && <p>Invoice no. <b>{doc.fira_invoice_number}</b></p>}
+      {doc.jir && <p className="break-all text-xs">JIR {doc.jir}</p>}
+      {doc.zki && <p className="break-all text-xs">ZKI {doc.zki}</p>}
+      {doc.fiscal_status && <p className="text-xs text-muted-foreground">Status: {doc.fiscal_status}</p>}
+      <p className="text-xs text-muted-foreground">FIRA order id {doc.fira_order_id}</p>
+    </div>
   );
 }

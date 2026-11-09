@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { connectFira, connectPaypal, saveBusiness, sendFiraTest } from "@/lib/fiskal/merchant.functions";
+import { connectFira, connectPaypal, saveBusiness, sendFiraTest, testFira } from "@/lib/fiskal/merchant.functions";
 import { EVENT_GROUPS_PLAIN } from "@/lib/fiskal/routing";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -22,7 +22,6 @@ export function BusinessForm({ merchant, onDone, submitLabel = "Continue" }: { m
     oib: merchant?.oib ?? "",
     in_vat_system: merchant?.in_vat_system ?? false,
     default_vat_rate: (merchant?.default_vat_rate ?? 0) as 0 | 5 | 13 | 25,
-    fira_payment_type: merchant?.fira_payment_type ?? "KARTICA",
     demo_mode: merchant?.demo_mode ?? true,
   });
   const [busy, setBusy] = useState(false);
@@ -53,21 +52,11 @@ export function BusinessForm({ merchant, onDone, submitLabel = "Continue" }: { m
         </div>
         <Switch checked={f.in_vat_system} onCheckedChange={(v) => setF({ ...f, in_vat_system: v, default_vat_rate: v ? 25 : 0 })} />
       </div>
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-6">
         <Field label="Default VAT rate">
           <Select disabled={!f.in_vat_system} value={String(f.default_vat_rate)} onValueChange={(v) => setF({ ...f, default_vat_rate: Number(v) as 0 })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{[25, 13, 5, 0].map((r) => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="FIRA payment type for PayPal">
-          <Select value={f.fira_payment_type} onValueChange={(v) => setF({ ...f, fira_payment_type: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="KARTICA">KARTICA (card)</SelectItem>
-              <SelectItem value="TRANSAKCIJSKI">TRANSAKCIJSKI (bank transfer)</SelectItem>
-              <SelectItem value="GOTOVINA">GOTOVINA (cash)</SelectItem>
-            </SelectContent>
           </Select>
         </Field>
       </div>
@@ -145,41 +134,63 @@ export function FiraForm({ merchant, onDone }: { merchant: any; onDone?: () => v
   const qc = useQueryClient();
   const connect = useServerFn(connectFira);
   const test = useServerFn(sendFiraTest);
+  const check = useServerFn(testFira);
   const [domain, setDomain] = useState(merchant?.fira_domain ?? "");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState<{ ok: boolean; message: string } | null>(null);
   const connected = !!merchant?.fira_connected_at;
   return (
     <div className="space-y-6">
       {connected && (
         <div className="rounded-lg border border-success bg-success/10 p-4">
           <p className="flex items-center gap-2 font-semibold text-success"><CheckCircle2 className="h-5 w-5" /> Connected</p>
-          <p className="mt-1 text-sm text-muted-foreground">{merchant.fira_domain} · API key ••••{merchant.fira_key_last4}</p>
-          <Button className="mt-3" variant="outline" disabled={busy} onClick={async () => {
-            setBusy(true);
-            try {
-              const r = await test();
-              r.ok ? toast.success("Test offer (PONUDA) created in FIRA") : toast.error(`FIRA answered ${r.status}: ${r.body}`);
-            } catch (e) { err(e); } finally { setBusy(false); }
-          }}>Send test document</Button>
+          <p className="mt-1 text-sm text-muted-foreground">API key ••••{merchant.fira_key_last4}{merchant.fira_domain ? ` · ${merchant.fira_domain}` : ""}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button disabled={busy} onClick={async () => {
+              setBusy(true);
+              try { const r = await check(); setHint(r); r.status === 200 ? toast.success(r.message) : toast.warning(r.message); }
+              catch (e) { err(e); } finally { setBusy(false); }
+            }}>Test connection</Button>
+            <Button variant="outline" disabled={busy} onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await test();
+                r.ok ? toast.success("Test offer (PONUDA) created in FIRA") : toast.error(`FIRA answered ${r.status}: ${r.body}`);
+              } catch (e) { err(e); } finally { setBusy(false); }
+            }}>Send test offer (PONUDA)</Button>
+          </div>
+          {hint && <p className={`mt-3 text-sm ${hint.ok ? "" : "text-destructive"}`}>{hint.message}</p>}
         </div>
       )}
-      <form className="space-y-4" onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        try {
-          await connect({ data: { domain, apiKey } });
-          await qc.invalidateQueries({ queryKey: ["merchant"] });
-          setApiKey("");
-          toast.success("FIRA connected");
-          onDone?.();
-        } catch (e) { err(e); } finally { setBusy(false); }
-      }}>
-        <p className="text-sm text-muted-foreground">In FIRA open <b>Settings → Integrations → Webshop</b> and copy your webshop domain and API key.</p>
-        <Field label="FIRA webshop domain"><Input required value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="mojshop.hr" /></Field>
-        <Field label="FIRA API key"><Input required type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" /></Field>
-        <Button type="submit" size="lg" disabled={busy}>{connected ? "Update FIRA" : "Connect FIRA"}</Button>
-      </form>
+      <div className="grid gap-6 sm:grid-cols-2">
+        <ol className="list-decimal space-y-2 rounded-lg bg-muted p-4 pl-8 text-sm">
+          <li>In FIRA open <b>Postavke → Webshop / ERP</b> and add a <b>Custom</b> integration.</li>
+          <li>Copy the API key.</li>
+          <li>Switch on <b>"Dozvoli dohvat podataka"</b> (lets us check invoice status), and the e-mail switches if you want FIRA to e-mail invoices to your buyers. FIRA sends those e-mails itself — we never e-mail anyone.</li>
+          <li>Paste the key here.</li>
+          <li className="list-none pt-1 text-xs text-muted-foreground">Requires FIRA Basic or Pro (Light plans have no API).</li>
+        </ol>
+        <form className="space-y-4" onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          try {
+            const r = await connect({ data: { domain, apiKey } });
+            await qc.invalidateQueries({ queryKey: ["merchant"] });
+            setApiKey("");
+            setHint(r.test);
+            r.test.status === 200 ? toast.success("FIRA connected") : toast.warning(`FIRA connected. ${r.test.message}`);
+            onDone?.();
+          } catch (e) { err(e); } finally { setBusy(false); }
+        }}>
+          <Field label="FIRA API key"><Input required type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" /></Field>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground">Advanced</summary>
+            <div className="mt-3"><Field label="Webshop domain (optional)"><Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="mojshop.hr" /></Field></div>
+          </details>
+          <Button type="submit" size="lg" disabled={busy}>{connected ? "Update FIRA key" : "Connect FIRA"}</Button>
+        </form>
+      </div>
     </div>
   );
 }

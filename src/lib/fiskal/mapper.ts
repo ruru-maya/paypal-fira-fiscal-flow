@@ -7,7 +7,8 @@ export interface LineItem {
   price: number; // gross unit price, EUR (negative for storno)
   quantity: number;
   unit: string;
-  taxRate: number;
+  taxRate: number; // percentage internally (25); converted to 0.25 only in the FIRA payload
+  productCode?: string | undefined; // PayPal sku → FIRA product list
 }
 
 export interface MappedInvoice {
