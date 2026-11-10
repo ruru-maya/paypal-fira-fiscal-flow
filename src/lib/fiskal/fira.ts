@@ -132,8 +132,8 @@ export function extractFiscal(body: unknown) {
   const src = b["invoice"] ?? b["data"] ?? b;
   const pick = (...keys: string[]) => { for (const k of keys) if (src?.[k] != null && src[k] !== "") return String(src[k]); return null; };
   return {
-    jir: pick("jir", "JIR"),
-    zki: pick("zki", "ZKI"),
+    jir: b["jir"] ? String(b["jir"]) : pick("jir", "JIR"),
+    zki: b["zki"] ? String(b["zki"]) : pick("zki", "ZKI"),
     invoiceNumber: pick("invoiceNumber", "number", "brojRacuna", "invoiceNo"),
     fiscalStatus: pick("fiscalizationStatus", "fiscalStatus", "status"),
   };

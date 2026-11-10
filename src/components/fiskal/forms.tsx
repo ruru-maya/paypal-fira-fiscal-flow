@@ -62,10 +62,10 @@ export function BusinessForm({ merchant, onDone, submitLabel = "Continue" }: { m
       </div>
       <div className="flex items-center justify-between rounded-lg border border-warning bg-warning/20 p-4">
         <div>
-          <p className="font-medium">Demo mode</p>
-          <p className="text-sm text-muted-foreground">Documents are sent to FIRA as offers (PONUDA), never fiscalized. Keep this on while testing.</p>
+          <p className="font-medium">FIRA test mode — send offers (PONUDA) instead of fiscal invoices</p>
+          <p className="text-sm text-muted-foreground">FIRA creates offers only, nothing is fiscalized. Keep this on while testing.</p>
         </div>
-        <Switch checked={f.demo_mode} onCheckedChange={(v) => setF({ ...f, demo_mode: v })} />
+        <Switch checked={f.demo_mode} onCheckedChange={(v) => { if (!v && !confirm("Turn off FIRA test mode? Real fiscal invoices will be issued and reported to the Tax Administration.")) return; setF({ ...f, demo_mode: v }); }} />
       </div>
       <Button type="submit" size="lg" disabled={busy}>{busy ? "Saving…" : submitLabel}</Button>
     </form>

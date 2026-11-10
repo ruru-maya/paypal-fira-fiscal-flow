@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { scrubText } from "./crypto";
+import { IS_PAYPAL_SANDBOX } from "./config";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function myMerchant(supabase: any) {
@@ -214,12 +215,24 @@ export const simulateDisputeFn = createServerFn({ method: "POST" })
     return { id: await engine.simulateDispute(m) };
   });
 
-/* ---------- Public test-shop functions (sandbox, demo-mode merchants only; never expose secrets) ---------- */
+export const downloadFiraPdfFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const m = await requireMerchant(context.supabase);
+    const { data: doc } = await context.supabase.from("fiscal_documents").select("fira_response, fira_invoice_number").eq("id", data.id).eq("merchant_id", m.id).maybeSingle();
+    const firaId = (doc?.fira_response as any)?.body?.id;
+    if (!firaId) throw new Error("FIRA did not return a document id for this document.");
+    const engine = await import("./engine.server");
+    return { base64: await engine.downloadFiraPdf(m.id, String(firaId)), filename: `FIRA-${doc?.fira_invoice_number ?? firaId}.pdf`.replace(/[^\w.-]/g, "_") };
+  });
+
+/* ---------- Public test-shop functions (PayPal sandbox only; never expose secrets) ---------- */
 async function shopMerchant(merchantId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: m } = await supabaseAdmin.from("merchants").select("*").eq("id", merchantId).maybeSingle();
   if (!m || !m.paypal_connected_at) throw new Error("This test shop is not available.");
-  if (!m.demo_mode) throw new Error("The test shop only works while demo mode is on.");
+  if (!IS_PAYPAL_SANDBOX) throw new Error("The test shop only works with PayPal sandbox.");
   return m;
 }
 const idSchema = z.object({ merchantId: z.string().uuid() });

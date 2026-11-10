@@ -29,11 +29,11 @@ function Settings() {
       {m && (
         <section className="flex items-center justify-between rounded-xl border p-5">
           <div>
-            <p className="font-semibold">Demo mode</p>
-            <p className="text-sm text-muted-foreground">{m.demo_mode ? "On — documents go to FIRA as offers (PONUDA)." : "Off — LIVE: real fiscal invoices and storno invoices are created."}</p>
+            <p className="font-semibold">FIRA test mode — send offers (PONUDA) instead of fiscal invoices</p>
+            <p className="text-sm text-muted-foreground">{m.demo_mode ? "On — FIRA creates offers only; nothing is fiscalized." : "Off — real fiscal invoices and storno invoices are issued and reported to the Tax Administration."}</p>
           </div>
           <Switch checked={m.demo_mode} onCheckedChange={async (v) => {
-            if (!v && !confirm("Turn off demo mode? New payments will create REAL fiscalized invoices.")) return;
+            if (!v && !confirm("Turn off FIRA test mode? Real fiscal invoices will be issued and reported to the Tax Administration.")) return;
             await demo({ data: { demo_mode: v } });
             qc.invalidateQueries({ queryKey: ["merchant"] });
           }} />
@@ -42,9 +42,9 @@ function Settings() {
       {m && (
         <section className="flex items-center justify-between gap-4 rounded-xl border p-5">
           <div>
-            <p className="font-semibold">Share a read-only live view of my dashboard (demo mode only)</p>
+            <p className="font-semibold">Share a read-only live view of my dashboard (FIRA test mode only)</p>
             <p className="text-sm text-muted-foreground">
-              {!m.demo_mode ? "Unavailable while demo mode is off." : m.share_live_view ? <>Anyone with the link can watch: <a className="text-primary underline" href={`/live/${m.id}`} target="_blank" rel="noreferrer">/live/{m.id}</a></> : "Off — nobody else can see your activity."}
+              {!m.demo_mode ? "Unavailable while FIRA test mode is off." : m.share_live_view ? <>Anyone with the link can watch: <a className="text-primary underline" href={`/live/${m.id}`} target="_blank" rel="noreferrer">/live/{m.id}</a></> : "Off — nobody else can see your activity."}
             </p>
           </div>
           <Switch disabled={!m.demo_mode} checked={m.demo_mode && m.share_live_view} onCheckedChange={async (v) => {

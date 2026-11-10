@@ -45,7 +45,7 @@ Rules:
 - Clean messy names (e.g. "SKU-221 HANDMADE MUG BLU x2" → name "Handmade mug, blue", quantity 2).
 - VAT: if merchant is NOT in the VAT system every taxRate is 0. Otherwise choose per line from Croatian rates: 25 standard; 13 (e.g. accommodation, some food services); 5 (e.g. books, some foods, medicines). Use the merchant default when unsure and add a warning.
 - Partial refunds: work out which original lines/quantities the refunded amount corresponds to. If no combination matches exactly, emit ONE proportional storno line and add a warning.
-- Cross-border/B2B: if payer is an EU business with a VAT id, or the payer is outside the EU, add a warning that reverse charge / OSS may apply and the merchant or accountant should confirm. NEVER apply special regimes yourself.
+- Cross-border/B2B (ONLY for merchants in the VAT system; skip for non-VAT merchants): if payer is an EU business with a VAT id, or the payer is outside the EU, add a warning that reverse charge / OSS may apply and the merchant or accountant should confirm. NEVER apply special regimes yourself.
 - explanation_en and explanation_hr: 1–3 plain sentences for a non-technical merchant: what happened and what document will be created.
 - confidence: 0–1, lower when you guessed.`;
 

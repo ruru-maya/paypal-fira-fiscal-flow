@@ -1,5 +1,7 @@
 // Single switch point for PayPal environment. Change to "https://api-m.paypal.com" for live.
 export const PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com";
+/** Sandbox tools (test shop, sandbox refunds, simulator) follow the PayPal environment, not demo mode. */
+export const IS_PAYPAL_SANDBOX = PAYPAL_API_BASE.includes("sandbox");
 export const FIRA_API_URL = "https://app.fira.finance/api/v1/webshop/order/custom";
 
 export const ALLOWED_VAT_RATES = [0, 5, 13, 25] as const;

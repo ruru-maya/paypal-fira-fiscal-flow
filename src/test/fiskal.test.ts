@@ -135,3 +135,11 @@ describe("FIRA payload whitelist (strict parsing)", () => {
     expect("productTaxCategory" in all[0].lineItems[0]).toBe(false);
   });
 });
+
+import { filterTaxRegimeWarnings } from "@/lib/fiskal/mapper";
+describe("non-VAT merchants skip tax-regime warnings", () => {
+  const w = ["Customer is outside the EU (US) — export/OSS rules may apply; confirm with your accountant.", "EU business with VAT id: reverse charge may apply", "B2B sale", "Partial refund: one proportional storno line was used."];
+  it("drops cross-border/B2B/OSS warnings when not in VAT system", () => expect(filterTaxRegimeWarnings(w, false)).toEqual(["Partial refund: one proportional storno line was used."]));
+  it("keeps them for VAT-registered merchants", () => expect(filterTaxRegimeWarnings(w, true)).toEqual(w));
+  it("non-VAT cross-border sale is sent automatically", () => expect(needsReview({ confidence: 0.9, warnings: filterTaxRegimeWarnings(w.slice(0, 3), false) }, [])).toBe(false));
+});

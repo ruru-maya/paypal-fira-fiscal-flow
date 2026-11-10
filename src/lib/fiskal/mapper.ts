@@ -107,6 +107,12 @@ export const deterministicMapper: InvoiceMapper = (event, details, settings) => 
 };
 
 /** Review gate: anything uncertain must be checked by a human before it reaches FIRA. */
+const TAX_REGIME_WARNING = /cross[- ]?border|outside the EU|non[- ]?EU|\bB2B\b|reverse[- ]?charge|\bOSS\b|export/i;
+/** Non-VAT merchants charge 0% anyway, so cross-border/B2B/OSS warnings are noise for them. */
+export function filterTaxRegimeWarnings(warnings: string[], inVatSystem: boolean): string[] {
+  return inVatSystem ? warnings : warnings.filter((w) => !TAX_REGIME_WARNING.test(w));
+}
+
 export function needsReview(m: Pick<MappedInvoice, "confidence" | "warnings">, validationErrors: string[]): boolean {
   return validationErrors.length > 0 || m.confidence < 0.7 || m.warnings.length > 0;
 }

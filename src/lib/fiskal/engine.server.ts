@@ -1,9 +1,9 @@
 // Server-only engine: PayPal + FIRA I/O and event processing. Import dynamically from handlers.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { FIRA_API_URL, PAYPAL_API_BASE, type MerchantSettings, type VatRate, type FiraPaymentType } from "./config";
+import { FIRA_API_URL, IS_PAYPAL_SANDBOX, PAYPAL_API_BASE, type MerchantSettings, type VatRate, type FiraPaymentType } from "./config";
 import { decrypt, encrypt } from "./crypto";
 import { routeEvent, SUBSCRIBED_EVENTS } from "./routing";
-import { needsReview, type LineItem, type PaymentDetails, type SourceItem } from "./mapper";
+import { filterTaxRegimeWarnings, needsReview, type LineItem, type PaymentDetails, type SourceItem } from "./mapper";
 import { aiMapToInvoice, AI_MODEL } from "./mapper.ai.server";
 import { validateInvoice } from "./validate";
 import { buildFiraPayload, extractFiscal, invoiceTypeFor, type Payer } from "./fira";
@@ -194,6 +194,8 @@ export async function sendDocument(docId: string, editedLines?: LineItem[]) {
   else if (r.status === 402) { status = "failed"; firaError = "Your FIRA subscription is unpaid."; }
   else { status = "failed"; firaError = `FIRA error ${r.status || "(no answer)"}: ${text}`; }
 
+  if (r.ok && !String(payload["invoiceType"]).startsWith("PONUDA") && r.body && typeof r.body === "object")
+    console.log("[fira] fiscal response keys", JSON.stringify(Object.keys(r.body as object)), "status-like:", JSON.stringify(Object.fromEntries(Object.entries(r.body as Record<string, unknown>).filter(([k]) => /status|fisk|fisc/i.test(k)))));
   const fiscal = r.ok ? extractFiscal(r.body) : { jir: null, zki: null, invoiceNumber: null, fiscalStatus: already ? "ALREADY_CREATED" : null };
   await supabaseAdmin.from("fiscal_documents").update({
     status, invoice_type: String(payload["invoiceType"]), line_items: lines as Json, validation_errors: [],
@@ -253,7 +255,7 @@ function originalIdOf(event: Json): string | null {
 
 /** Simulator events can't pass signature checks; accept only demo-mode merchants with a fresh nonce we created. */
 async function consumeSimulationNonce(merchant: Json, event: Json): Promise<boolean> {
-  if (!merchant.demo_mode) return false;
+  if (!IS_PAYPAL_SANDBOX) return false;
   const { data } = await supabaseAdmin.from("simulation_nonces").select("id, paypal_event_id")
     .eq("merchant_id", merchant.id).eq("event_type", event.event_type).is("used_at", null)
     .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false });
@@ -407,7 +409,8 @@ export async function processEvent(merchant: Json, event: Json, verified: boolea
     if (kind === "invoice" && items && items.length === mapped.lineItems.length)
       mapped.lineItems.forEach((l, i) => { if (items![i]?.sku) l.productCode = items![i]!.sku; });
     // Code-side cross-border safety net (never applies a regime, only warns).
-    if (payer?.country && !isEu(payer.country) && !mapped.warnings.some((w) => /OSS|reverse|outside/i.test(w)))
+    mapped.warnings = filterTaxRegimeWarnings(mapped.warnings, settings.in_vat_system);
+    if (settings.in_vat_system && payer?.country && !isEu(payer.country) && !mapped.warnings.some((w) => /OSS|reverse|outside/i.test(w)))
       mapped.warnings.push(`Customer is outside the EU (${payer.country}) — export/OSS rules may apply; confirm with your accountant.`);
     const errors = amount == null ? ["PayPal event has no amount."] : validateInvoice(mapped.lineItems, { amount: signed, currency: docCurrency }, "EUR", settings, { shipping, discount });
     const allWarnings = [...warnings, ...mapped.warnings];
@@ -513,7 +516,7 @@ export async function refundCapture(merchantId: string, captureId: string, amoun
 }
 
 export async function simulateDispute(merchant: Json) {
-  if (!merchant.demo_mode) throw new Error("Simulation is only available in demo mode.");
+  if (!IS_PAYPAL_SANDBOX) throw new Error("Simulation is only available with PayPal sandbox.");
   const { token } = await merchantToken(merchant.id);
   const { data: nonce } = await supabaseAdmin.from("simulation_nonces").insert({ merchant_id: merchant.id, event_type: "CUSTOMER.DISPUTE.CREATED" }).select("id").single();
   const r = await pp(token, "/v1/notifications/simulate-event", {
@@ -522,4 +525,17 @@ export async function simulateDispute(merchant: Json) {
   if (!r.ok) throw new Error(`PayPal simulator: ${r.body.message ?? r.status}`);
   if (nonce && r.body.id) await supabaseAdmin.from("simulation_nonces").update({ paypal_event_id: r.body.id }).eq("id", nonce.id).is("used_at", null);
   return r.body.id as string;
+}
+
+/** Old FIRA PDF route; works without "Dozvoli dohvat podataka". Returns base64 PDF. */
+export async function downloadFiraPdf(merchantId: string, firaInvoiceId: string) {
+  const creds = await loadCredentials(merchantId);
+  if (!creds.firaApiKey) throw new Error("FIRA is not connected");
+  const h: Record<string, string> = { "FIRA-Api-Key": creds.firaApiKey, Accept: "application/pdf" };
+  if (creds.firaDomain) h["X-Webshop-Domain"] = creds.firaDomain;
+  const res = await fetch(`https://app.fira.finance/api/v1/webshop/invoice/${encodeURIComponent(firaInvoiceId)}/pdf`, { headers: h, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`FIRA could not provide the PDF (${res.status}).`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 }

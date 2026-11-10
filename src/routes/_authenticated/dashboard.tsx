@@ -12,9 +12,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { merchantQuery, StatusBadge, whatWeDid } from "@/components/fiskal/shared";
-import { listTimeline, refundPayment, resendDocument, simulateDisputeFn } from "@/lib/fiskal/merchant.functions";
+import { downloadFiraPdfFn, listTimeline, refundPayment, resendDocument, simulateDisputeFn } from "@/lib/fiskal/merchant.functions";
 import { ROUTE_LABEL, type Route as EvRoute } from "@/lib/fiskal/routing";
 import { maskEmails } from "@/lib/fiskal/crypto";
+import { IS_PAYPAL_SANDBOX } from "@/lib/fiskal/config";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — FiskalBridge" }, { name: "description", content: "Your PayPal events and FIRA documents." }] }),
@@ -86,10 +87,10 @@ function Dashboard() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {m.demo_mode && (
+        {IS_PAYPAL_SANDBOX && (
           <Button asChild variant="outline"><Link to="/shop/$merchantId" params={{ merchantId: m.id }} target="_blank"><Store className="h-4 w-4" /> Open my test shop</Link></Button>
         )}
-        {m.demo_mode && (
+        {IS_PAYPAL_SANDBOX && (
           <Button variant="outline" onClick={async () => {
             try { await simulate(); toast.success("Dispute simulation requested — it will appear in a few seconds"); } catch (e) { toast.error(errMsg(e)); }
           }}><Siren className="h-4 w-4" /> Simulate dispute</Button>
@@ -133,7 +134,7 @@ function Dashboard() {
                   {doc && <StatusBadge status={doc.status} />}
                 </button>
                 {doc?.status === "needs_review" && <Button size="sm" asChild><Link to="/review/$docId" params={{ docId: doc.id }}>Review</Link></Button>}
-                {m.demo_mode && ev.event_type === "PAYMENT.CAPTURE.COMPLETED" && (
+                {IS_PAYPAL_SANDBOX && ev.event_type === "PAYMENT.CAPTURE.COMPLETED" && (
                   <Button size="sm" variant="ghost" onClick={() => setRefundEv(ev)}>Refund (sandbox)</Button>
                 )}
               </div>
@@ -265,16 +266,30 @@ function Raw({ title, value }: { title: string; value: unknown }) {
 function FiscalResult({ doc }: { doc: any }) {
   if (!doc || doc.status !== "sent") return null;
   const failedFisc = /NEUSPJE/i.test(doc.fiscal_status ?? "");
-  const fiscalized = !!doc.jir && /FISKALIZIRANO/i.test(doc.fiscal_status ?? "") && !failedFisc;
+  const fiscalized = /FISKALIZIRANO/i.test(doc.fiscal_status ?? "") && !failedFisc;
+  const pdf = useServerFn(downloadFiraPdfFn);
+  const [busy, setBusy] = useState(false);
   return (
     <div className={`space-y-1 rounded-lg border p-3 ${failedFisc ? "border-warning bg-warning/15" : "bg-card"}`}>
-      {fiscalized && <p className="font-semibold text-success">Fiscalized ✓</p>}
+      {fiscalized && <p className="font-semibold text-success">Fiscalized by the Tax Administration ✓</p>}
       {failedFisc && <p className="font-semibold text-warning-foreground">Tax office unreachable — FIRA will retry fiscalization for 48 h</p>}
       {doc.fira_invoice_number && <p>Invoice no. <b>{doc.fira_invoice_number}</b></p>}
       {doc.jir && <p className="break-all text-xs">JIR {doc.jir}</p>}
       {doc.zki && <p className="break-all text-xs">ZKI {doc.zki}</p>}
       {doc.fiscal_status && <p className="text-xs text-muted-foreground">Status: {doc.fiscal_status}</p>}
       <p className="text-xs text-muted-foreground">FIRA order id {doc.fira_order_id}</p>
+      {doc.fira_response?.body?.id && (
+        <Button size="sm" variant="outline" className="mt-2" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const r = await pdf({ data: { id: doc.id } });
+            const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+            const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+            const a = document.createElement("a"); a.href = url; a.download = r.filename; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+          } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
+        }}>{busy ? "Downloading…" : "Download PDF from FIRA"}</Button>
+      )}
     </div>
   );
 }

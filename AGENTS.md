@@ -38,8 +38,8 @@ use the editor.
 - Invoice mapping: AI mapper in `src/lib/fiskal/mapper.ai.server.ts` (structured tool output) with the deterministic mapper as fallback; code validation + `needsReview` gate always decide whether anything is sent.
 - `sendDocument` re-validates line items and refuses to send invalid documents; there is no bypass path.
 - In production `src/server.ts` short-circuits the PayPal webhook with `ctx.waitUntil` so PayPal gets 200 immediately; the route handler is the inline fallback. FIRA calls have an 8s timeout.
-- Simulated PayPal events are accepted only for demo-mode merchants holding an unexpired one-time nonce in `simulation_nonces`.
-- Public test-shop server functions work only for demo-mode merchants and expose only the public PayPal client id.
+- Simulated PayPal events are accepted only when `IS_PAYPAL_SANDBOX` (config) and the merchant holds an unexpired one-time nonce in `simulation_nonces`.
+- Sandbox tools (test shop, sandbox refunds, simulator) follow `IS_PAYPAL_SANDBOX`, not demo mode; demo mode only picks PONUDA vs fiscal types and gates the live view. Test-shop functions expose only the public PayPal client id.
 
 ## FIRA API rules (Webshop/ERP API v1.5.1)
 - Internal VAT is a percentage (25); the FIRA payload sends a decimal fraction (0.25). Convert only in `buildFiraPayload`.
@@ -58,3 +58,4 @@ use the editor.
 - The connector never sends e-mail; FIRA e-mails buyers when the merchant enables it.
 - Public live view `/live/$merchantId` uses an unauthenticated server fn that returns data only when the merchant is in demo mode AND opted in (`share_live_view`); it never returns raw payloads/FIRA requests and masks names/e-mails. It polls because anon users can't use RLS realtime. Turning demo mode off clears the share flag.
 - Browser users have column-level INSERT/UPDATE grants on `merchants` (business settings only); connection fields are written server-side with the admin client.
+- Non-VAT merchants: cross-border/B2B/OSS warnings are dropped (`filterTaxRegimeWarnings`) since VAT is 0% anyway.
