@@ -9,12 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getDocument, resendDocument, skipDocument } from "@/lib/fiskal/merchant.functions";
-import { StatusBadge } from "@/components/fiskal/shared";
+import { plainFiraError, plainWarning, TechnicalDetails } from "@/components/fiskal/shared";
 import type { LineItem } from "@/lib/fiskal/mapper";
 import { maskEmails } from "@/lib/fiskal/crypto";
 
 export const Route = createFileRoute("/_authenticated/review/$docId")({
-  head: () => ({ meta: [{ title: "Review document — FiskalBridge" }, { name: "description", content: "Check and approve a document before it is sent to FIRA." }] }),
+  head: () => ({ meta: [{ title: "Check this invoice — FiskalBridge" }, { name: "description", content: "Check the items and confirm before the invoice is created in FIRA." }] }),
   component: Review,
 });
 
@@ -28,7 +28,7 @@ function Review() {
   const skip = useServerFn(skipDocument);
   const { data, isLoading } = useQuery({ queryKey: ["doc", docId], queryFn: () => fetchDoc({ data: { id: docId } }) });
   const [lines, setLines] = useState<LineItem[]>([]);
-  const [lang, setLang] = useState<"en" | "hr">("en");
+  const [lang, setLang] = useState<"en" | "hr">("hr");
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -51,22 +51,19 @@ function Review() {
     <main className="mx-auto max-w-6xl px-4 py-8">
       <Link to="/dashboard" className="text-sm text-primary">← Back to dashboard</Link>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold">Review {doc.kind === "storno" ? "storno" : "invoice"}</h1>
-        <StatusBadge status={doc.status} />
-        {doc.ai_mapped && <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"><Sparkles className="h-3 w-3" /> AI-mapped · {Math.round(Number(doc.confidence) * 100)}%</span>}
-        {run && <span className="text-xs text-muted-foreground">{run.model} · {run.latency_ms} ms{run.used_fallback ? " · fallback used" : ""}</span>}
+        <h1 className="text-2xl font-bold">Check this {doc.kind === "storno" ? "cancellation (storno)" : "invoice"}</h1>
+        {doc.ai_mapped && <span title="Prepared by AI, checked by our rules" className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"><Sparkles className="h-3 w-3" /> AI · {Math.round(Number(doc.confidence) * 100)}% sure</span>}
       </div>
+      <p className="mt-2 text-muted-foreground">We weren't completely sure about this one. Please check the items and confirm.</p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-4 font-semibold">What PayPal says</h2>
+          <h2 className="mb-4 font-semibold">What the customer paid</h2>
           <dl className="space-y-2 text-sm">
-            <Row k="Event" v={ev?.event_type} />
             <Row k="Amount" v={`${Number(ev?.amount ?? 0).toFixed(2)} ${ev?.currency ?? ""}`} />
-            <Row k="Reference" v={ev?.resource_id} />
-            <Row k="Payer" v={maskEmails([src.payer?.name, src.payer?.email, src.payer?.country].filter(Boolean).join(" · ") || "—")} />
+            <Row k="Customer" v={maskEmails([src.payer?.name, src.payer?.country].filter(Boolean).join(" · ") || "—")} />
             {src.company && <Row k="Company" v={src.company} />}
-            {src.vatId && <Row k="VAT id" v={src.vatId} />}
+            {src.vatId && <Row k="VAT number" v={src.vatId} />}
           </dl>
           {(src.items?.length > 0 || src.planName || src.itemName) && (
             <div className="mt-4">
@@ -78,16 +75,16 @@ function Review() {
           )}
           {src.originalLines?.length > 0 && (
             <div className="mt-4">
-              <p className="mb-1 text-sm font-medium">Original invoice</p>
+              <p className="mb-1 text-sm font-medium">The original invoice</p>
               {src.originalLines.map((l: any, k: number) => <p key={k} className="border-b py-1 text-sm">{l.quantity} × {l.name} — {Number(l.price).toFixed(2)} ({l.taxRate}%)</p>)}
             </div>
           )}
         </section>
 
         <section className="rounded-xl border bg-card p-5">
-          <h2 className="mb-4 font-semibold">What we'll send to FIRA</h2>
+          <h2 className="mb-4 font-semibold">What goes on the invoice</h2>
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_4rem_5.5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground"><span>Name</span><span>Qty</span><span>Unit price</span><span>VAT</span><span /></div>
+            <div className="grid grid-cols-[1fr_4rem_5.5rem_5rem_2rem] gap-2 text-xs font-medium text-muted-foreground"><span>Name</span><span>Qty</span><span>Price</span><span>VAT</span><span /></div>
             {lines.map((l, i) => (
               <div key={i} className="grid grid-cols-[1fr_4rem_5.5rem_5rem_2rem] gap-2">
                 <Input disabled={!editable} value={l.name} onChange={(e) => upd(i, { name: e.target.value })} />
@@ -100,11 +97,11 @@ function Review() {
                 <Button disabled={!editable || lines.length === 1} variant="ghost" size="icon" onClick={() => setLines(lines.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
               </div>
             ))}
-            {editable && <Button variant="ghost" size="sm" onClick={() => setLines([...lines, { name: "", description: "", lineItemId: String(lines.length + 1), price: 0, quantity: 1, unit: "kom", taxRate: lines[0]?.taxRate ?? 0 }])}><Plus className="h-4 w-4" /> Add line</Button>}
+            {editable && <Button variant="ghost" size="sm" onClick={() => setLines([...lines, { name: "", description: "", lineItemId: String(lines.length + 1), price: 0, quantity: 1, unit: "kom", taxRate: lines[0]?.taxRate ?? 0 }])}><Plus className="h-4 w-4" /> Add item</Button>}
           </div>
           <div className={`mt-4 flex items-center justify-between rounded-lg p-3 font-semibold ${matches ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-            <span className="flex items-center gap-2">{matches ? <CheckCircle2 className="h-5 w-5" /> : <CircleX className="h-5 w-5" />} Total {total.toFixed(2)} EUR</span>
-            <span className="text-sm font-normal">PayPal: {target.toFixed(2)}{extras !== 0 && ` (incl. shipping/discount ${(extras / 100).toFixed(2)})`}</span>
+            <span className="flex items-center gap-2">{matches ? <CheckCircle2 className="h-5 w-5" /> : <CircleX className="h-5 w-5" />} Invoice total {total.toFixed(2)} EUR</span>
+            <span className="text-sm font-normal">Customer paid {target.toFixed(2)}{extras !== 0 && ` (incl. shipping/discount ${(extras / 100).toFixed(2)})`}</span>
           </div>
         </section>
       </div>
@@ -112,20 +109,20 @@ function Review() {
       <section className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border bg-card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">AI explanation</h2>
+            <h2 className="font-semibold">What happened</h2>
             <div className="flex rounded-md border text-xs">
-              {(["en", "hr"] as const).map((l) => <button key={l} onClick={() => setLang(l)} className={`px-2.5 py-1 uppercase ${lang === l ? "bg-muted font-semibold" : ""}`}>{l}</button>)}
+              {(["hr", "en"] as const).map((l) => <button key={l} onClick={() => setLang(l)} className={`px-2.5 py-1 uppercase ${lang === l ? "bg-muted font-semibold" : ""}`}>{l}</button>)}
             </div>
           </div>
           <p className="text-sm">{lang === "en" ? doc.explanation_en : doc.explanation_hr}</p>
         </div>
         <div className="rounded-xl border border-warning bg-warning/15 p-5 text-sm">
-          <h2 className="mb-2 font-semibold">Why this needs review</h2>
+          <h2 className="mb-2 font-semibold">Why we're asking</h2>
           <ul className="space-y-1">
             {errors.map((w, i) => <li key={`e${i}`} className="text-destructive">✕ {w}</li>)}
-            {doc.fira_error && <li className="text-destructive">✕ {doc.fira_error}</li>}
-            {(doc.warnings ?? []).map((w: string, i: number) => <li key={i}>⚠ {w}</li>)}
-            {Number(doc.confidence) < 0.7 && <li>⚠ AI confidence is below 70%.</li>}
+            {doc.fira_error && <li className="text-destructive">✕ {plainFiraError(doc.fira_error)}</li>}
+            {(doc.warnings ?? []).map((w: string, i: number) => <li key={i}>⚠ {plainWarning(w)}</li>)}
+            {Number(doc.confidence) < 0.7 && <li>⚠ We weren't sure enough to create it automatically.</li>}
           </ul>
         </div>
       </section>
@@ -136,21 +133,32 @@ function Review() {
             setBusy(true);
             try {
               const r = await send({ data: { id: doc.id, lineItems: lines } });
-              if (r.errors.length) { setErrors(r.errors); toast.error("Not sent — fix the errors shown."); }
-              else if (r.ok) { toast.success("Sent to FIRA"); await qc.invalidateQueries({ queryKey: ["timeline"] }); navigate({ to: "/dashboard" }); }
-              else { toast.error(r.firaError ?? "FIRA did not accept the document."); await qc.invalidateQueries({ queryKey: ["doc", docId] }); }
+              if (r.errors.length) { setErrors(r.errors); toast.error("Not created yet — please fix what's shown."); }
+              else if (r.ok) { toast.success("Invoice created in FIRA"); await qc.invalidateQueries({ queryKey: ["timeline"] }); navigate({ to: "/dashboard" }); }
+              else { toast.error(plainFiraError(r.firaError ?? "")); await qc.invalidateQueries({ queryKey: ["doc", docId] }); }
             } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-          }}>Approve & send to FIRA</Button>
+          }}>Looks good — create invoice</Button>
           <div className="flex-1 space-y-2">
-            <Textarea placeholder="Reason for not invoicing (required)" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+            <Textarea placeholder="Why shouldn't we create an invoice? (required)" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
           </div>
           <Button variant="outline" disabled={busy || reason.trim().length < 3} onClick={async () => {
             setBusy(true);
-            try { await skip({ data: { id: doc.id, reason } }); toast.success("Skipped"); await qc.invalidateQueries({ queryKey: ["timeline"] }); navigate({ to: "/dashboard" }); }
+            try { await skip({ data: { id: doc.id, reason } }); toast.success("No invoice will be created"); await qc.invalidateQueries({ queryKey: ["timeline"] }); navigate({ to: "/dashboard" }); }
             catch (e) { toast.error(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-          }}>Skip — don't invoice</Button>
+          }}>Don't create an invoice</Button>
         </section>
       )}
+      <div className="mt-6">
+        <TechnicalDetails>
+          <dl className="space-y-1 text-xs">
+            <div>PayPal event: <code>{ev?.event_type}</code></div>
+            <div>PayPal id: <code className="break-all">{ev?.resource_id}</code></div>
+            {run && <div>AI: {run.model} · {run.latency_ms} ms{run.used_fallback ? " · fallback used" : ""}</div>}
+          </dl>
+          {(doc.warnings ?? []).length > 0 && <ul className="text-xs">{doc.warnings.map((w: string, i: number) => <li key={i}>• {w}</li>)}</ul>}
+          {doc.fira_error && <p className="break-words text-xs">FIRA said: {doc.fira_error}</p>}
+        </TechnicalDetails>
+      </div>
     </main>
   );
 }

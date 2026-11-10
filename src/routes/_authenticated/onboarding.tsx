@@ -18,6 +18,16 @@ function Onboarding() {
   const [step, setStep] = useState(0);
   if (isLoading) return null;
   const m = data?.merchant;
+  if (step === 3) {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-20 text-center">
+        <h1 className="text-3xl font-bold">You're all set 🎉</h1>
+        <p className="mt-4 text-lg">From now on, every PayPal payment becomes an invoice in FIRA automatically.</p>
+        <p className="mt-4 rounded-lg border border-warning bg-warning/15 p-4 text-sm">You're in Testing mode — FIRA creates offers, not official invoices, until you go live.</p>
+        <Button size="lg" className="mt-8" onClick={() => navigate({ to: "/dashboard" })}>Go to my dashboard</Button>
+      </main>
+    );
+  }
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <ol className="mb-10 flex gap-2">
@@ -33,20 +43,20 @@ function Onboarding() {
       <h1 className="mb-2 text-3xl font-bold">{STEPS[step]}</h1>
       <p className="mb-8 text-muted-foreground">
         {step === 0 && "Tell us a little about your business so invoices come out right."}
-        {step === 1 && "Paste your PayPal app keys. We'll set up the connection for you automatically."}
-        {step === 2 && "Paste your FIRA key. From then on, every PayPal payment becomes an invoice."}
+        {step === 1 && "Copy two codes from PayPal. We'll do the rest."}
+        {step === 2 && "Paste your FIRA key. We'll check it right away."}
       </p>
       {step === 0 && <BusinessForm merchant={m} onDone={() => setStep(1)} />}
       {step === 1 && (
         <>
-          <PaypalForm merchant={m} webhookUrl={data?.webhookUrl ?? null} />
+          <PaypalForm merchant={m} />
           {m?.paypal_connected_at && <Button className="mt-6" variant="secondary" onClick={() => setStep(2)}>Next: FIRA →</Button>}
         </>
       )}
       {step === 2 && (
         <>
           <FiraForm merchant={m} />
-          {m?.fira_connected_at && <Button className="mt-6" onClick={() => navigate({ to: "/dashboard" })}>Finish → Dashboard</Button>}
+          {m?.fira_connected_at && <Button className="mt-6" onClick={() => setStep(3)}>Finish →</Button>}
         </>
       )}
     </main>
