@@ -71,7 +71,6 @@ export function buildFiraPayload(args: {
   const netto = netC / 100;
   const taxValue = inVat ? (grossC - netC) / 100 : 0;
 
-  const b2b = !!(args.payer?.company || args.payer?.vatNumber);
   const payload: Record<string, unknown> = {
     webshopOrderId: args.webshopOrderId,
     webshopType: "CUSTOM",
@@ -87,7 +86,7 @@ export function buildFiraPayload(args: {
       address1: args.payer?.address1 ?? "", address2: args.payer?.address2 ?? "",
       city: args.payer?.city ?? "", zipCode: args.payer?.zipCode ?? "", country: args.payer?.country ?? "HR",
       email: args.payer?.email ?? "", phone: args.payer?.phone ?? "",
-      oib: args.payer?.oib ?? "", vatNumber: args.payer?.vatNumber ?? "", b2bClient: b2b,
+      oib: args.payer?.oib ?? "", vatNumber: args.payer?.vatNumber ?? "",
     },
     taxValue,
     brutto,
@@ -101,8 +100,31 @@ export function buildFiraPayload(args: {
   if (shipC) payload["totalShipping"] = shipC / 100;
   if (discC) payload["discounts"] = [{ name: "PayPal discount", amount: discC / 100 }];
   if (args.kind === "storno" && args.originalInvoiceNumber) payload["termsHR"] = `Storno računa br. ${args.originalInvoiceNumber}`;
-  return payload;
+  return whitelistPayload(payload);
 }
+
+// FIRA parses strictly: any unknown field → 400. Only these keys may ever be sent.
+export const FIRA_TOP_KEYS = ["webshopOrderId", "webshopType", "webshopEvent", "webshopOrderNumber", "invoiceType", "paymentGatewayCode",
+  "paymentGatewayName", "createdAt", "dueDate", "validTo", "currency", "taxesIncluded", "billingAddress", "taxValue", "brutto", "netto",
+  "customerLocale", "lineItems", "paymentType", "internalNote", "termsHR", "totalShipping", "discounts"] as const;
+export const FIRA_ADDRESS_KEYS = ["name", "company", "address1", "address2", "city", "zipCode", "country", "email", "phone", "oib", "vatNumber"] as const;
+export const FIRA_LINE_KEYS = ["name", "description", "lineItemId", "price", "quantity", "unit", "taxRate", "productTaxCategory", "taxExemptionReason", "productCode"] as const;
+
+const pick = (o: Record<string, unknown>, keys: readonly string[]) =>
+  Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+
+export function whitelistPayload(p: Record<string, unknown>): Record<string, unknown> {
+  const out = pick(p, FIRA_TOP_KEYS);
+  if (!out["termsHR"]) delete out["termsHR"];
+  if (!out["totalShipping"]) delete out["totalShipping"];
+  if (!Array.isArray(out["discounts"]) || !(out["discounts"] as unknown[]).length) delete out["discounts"];
+  out["billingAddress"] = pick((p["billingAddress"] ?? {}) as Record<string, unknown>, FIRA_ADDRESS_KEYS);
+  out["lineItems"] = ((p["lineItems"] ?? []) as Record<string, unknown>[]).map((l) => pick(l, FIRA_LINE_KEYS));
+  return out;
+}
+
+/** Friendly text for FIRA's strict-parsing rejection. */
+export const isUnknownFieldError = (msg?: string | null) => !!msg && /Unrecognized field/i.test(msg);
 
 /** Pulls fiscal fields out of a FIRA response (field names vary by endpoint). */
 export function extractFiscal(body: unknown) {

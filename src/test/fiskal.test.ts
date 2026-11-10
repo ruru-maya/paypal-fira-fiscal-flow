@@ -85,11 +85,10 @@ describe("FIRA payload (API v1.5.1)", () => {
     expect(p.paymentGatewayCode).toBe("paypal");
     expect("prepaidAmount" in p).toBe(false);
   });
-  it("b2bClient false for consumers, true with company/VAT id", () => {
-    const c: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], payer: { name: "Ana" } });
-    const b: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], payer: { company: "X d.o.o.", vatNumber: "HR123" } });
-    expect(c.billingAddress.b2bClient).toBe(false);
-    expect(b.billingAddress.b2bClient).toBe(true);
+  it("never sends b2bClient", () => {
+    const b: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], payer: { company: "X d.o.o.", vatNumber: "HR123", b2bClient: true } as any });
+    expect("b2bClient" in b.billingAddress).toBe(false);
+    expect(JSON.stringify(b)).not.toContain("b2bClient");
   });
   it("shipping → totalShipping, discount → discounts, sku → productCode", () => {
     const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(18, 1, 25, { productCode: "MUG-01" })], shipping: 5, discount: 2 });
@@ -117,5 +116,22 @@ describe("FIRA payload (API v1.5.1)", () => {
     expect(zagrebLocal("2026-03-29T01:30:00Z")).toBe("2026-03-29T03:30:00"); // after switch
     const p: any = buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(10, 1, 25)], createdAt: "2026-11-10T08:15:00Z" });
     expect(p.createdAt).toBe("2026-11-10T09:15:00");
+  });
+});
+
+import { FIRA_ADDRESS_KEYS, FIRA_LINE_KEYS, FIRA_TOP_KEYS } from "@/lib/fiskal/fira";
+describe("FIRA payload whitelist (strict parsing)", () => {
+  const all = [
+    buildFiraPayload({ ...base, kind: "invoice", settings: vat, lineItems: [L(18, 1, 25, { productCode: "S", extra: 1 })], shipping: 5, discount: 2, createdAt: "2026-11-10T08:15:00Z", payer: { name: "A", foo: 1 } as any }),
+    buildFiraPayload({ ...base, kind: "invoice", settings: s, lineItems: [L(10, 1, 0)] }),
+    buildFiraPayload({ ...base, kind: "storno", settings: vat, lineItems: [L(-10, 1, 25)], originalInvoiceNumber: "1-1-1" }),
+  ] as any[];
+  it("top-level keys are whitelisted", () => all.forEach((p) => Object.keys(p).forEach((k) => expect(FIRA_TOP_KEYS as readonly string[]).toContain(k))));
+  it("billingAddress has exactly the 11 keys", () => all.forEach((p) => expect(Object.keys(p.billingAddress).sort()).toEqual([...FIRA_ADDRESS_KEYS].sort())));
+  it("line keys are whitelisted", () => all.forEach((p) => p.lineItems.forEach((l: any) => Object.keys(l).forEach((k) => expect(FIRA_LINE_KEYS as readonly string[]).toContain(k)))));
+  it("optional keys only when they have a value", () => {
+    expect(["termsHR", "totalShipping", "discounts"].some((k) => k in all[1])).toBe(false);
+    expect("productCode" in all[1].lineItems[0]).toBe(false);
+    expect("productTaxCategory" in all[0].lineItems[0]).toBe(false);
   });
 });

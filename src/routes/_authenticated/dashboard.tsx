@@ -1,3 +1,4 @@
+import { isUnknownFieldError } from "@/lib/fiskal/fira";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -201,7 +202,12 @@ function Detail({ ev, onClose }: { ev: any; onClose: () => void }) {
               <div className="flex items-center gap-3">{doc && <StatusBadge status={doc.status} />}<span>{whatWeDid(doc)}</span></div>
               <p className="text-xs text-muted-foreground">{ev.event_type} · {ev.resource_id} · {ev.simulated ? "Simulated (demo)" : ev.verified ? "Signature verified" : "Not verified"}</p>
               <FiscalResult doc={doc} />
-              {doc?.fira_error && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">{doc.fira_error}</p>}
+              {doc?.fira_error && (isUnknownFieldError(doc.fira_error) ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  <p>FIRA didn't accept a field we sent — this is a connector bug, not your data.</p>
+                  <details className="mt-1 text-xs"><summary className="cursor-pointer">Raw reason</summary><p className="mt-1 break-words">{doc.fira_error}</p></details>
+                </div>
+              ) : <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">{doc.fira_error}</p>)}
               {doc?.skip_reason && <p className="rounded-lg bg-muted p-3">Skipped: {doc.skip_reason}</p>}
               {doc?.explanation_en && (
                 <div className="space-y-2 rounded-lg bg-muted p-4">

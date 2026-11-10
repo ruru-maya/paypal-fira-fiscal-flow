@@ -48,7 +48,7 @@ use the editor.
 - `webshopOrderId` is FIRA's int64 idempotency key: always the document's `fira_order_id` identity, identical on every retry, never `Date.now()` for real documents. A 400 "already created" means success. `webshopOrderNumber` holds the PayPal id.
 - `createdAt` is Europe/Zagreb local time without zone or offset (`zagrebLocal`).
 - `paymentType` is always `KARTICA` with `paymentGatewayCode: "paypal"` / `paymentGatewayName: "PayPal"`; never send `prepaidAmount`. Merchants get no payment-type choice.
-- `billingAddress.b2bClient` is sent explicitly: true only with a company or VAT id.
+- FIRA parses strictly: `whitelistPayload` in `fira.ts` is the only gate for top-level, billingAddress (11 keys, no b2bClient) and line keys; Retry/Approve always rebuild the payload, never resend stored `fira_request`.
 - PayPal shipping → `totalShipping`, discounts → `discounts[]`, sku → line `productCode`; `lineItemId` is display only. Validation includes shipping and discounts.
 - Storno: stand-alone document with negative amounts, own `webshopOrderId`, original invoice number in `termsHR`; demo mode still sends PONUDA. FIRA never e-mails stornos.
 - Only `FIRA-Api-Key` is required; send `X-Webshop-Domain` only when the merchant set one.
