@@ -59,3 +59,4 @@ use the editor.
 - Public live view `/live/$merchantId` uses an unauthenticated server fn that returns data only when the merchant is in demo mode AND opted in (`share_live_view`); it never returns raw payloads/FIRA requests and masks names/e-mails. It polls because anon users can't use RLS realtime. Turning demo mode off clears the share flag.
 - Browser users have column-level INSERT/UPDATE grants on `merchants` (business settings only); connection fields are written server-side with the admin client.
 - Non-VAT merchants: cross-border/B2B/OSS warnings are dropped (`filterTaxRegimeWarnings`) since VAT is 0% anyway.
+- Public test-shop server fns gate on `canUseTestShop` (src/lib/fiskal/shop-access.ts): anonymous only in Testing mode; Live mode requires the owner's access token verified with the admin client.

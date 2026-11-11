@@ -1,5 +1,7 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "fiskalbridge",
+  "description": "FiskalBridge: PayPal to FIRA fiscalization connector for Croatian online merchants.",
+  "license": "AGPL-3.0-only",
   "private": true,
   "sideEffects": false,
   "type": "module",

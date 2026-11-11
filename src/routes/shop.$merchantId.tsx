@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Minus, Plus } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { getShopConfig, shopCaptureOrder, shopCreateOrder, shopSubscriptionPlan } from "@/lib/fiskal/merchant.functions";
 
@@ -34,13 +35,18 @@ function loadSdk(src: string, ns: string) {
   });
 }
 
+async function token() {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token;
+}
+
 function Shop() {
   const { merchantId } = Route.useParams();
   const cfgFn = useServerFn(getShopConfig);
   const createFn = useServerFn(shopCreateOrder);
   const captureFn = useServerFn(shopCaptureOrder);
   const planFn = useServerFn(shopSubscriptionPlan);
-  const { data: cfg } = useQuery({ queryKey: ["shop", merchantId], queryFn: () => cfgFn({ data: { merchantId } }) });
+  const { data: cfg } = useQuery({ queryKey: ["shop", merchantId], queryFn: async () => cfgFn({ data: { merchantId, accessToken: await token() } }) });
   const [cart, setCart] = useState<Record<string, number>>({});
   const [done, setDone] = useState<string | null>(null);
   const cartRef = useRef(cart);
@@ -69,10 +75,10 @@ function Shop() {
           createOrder: async () => {
             const c = Object.entries(cartRef.current).filter(([, q]) => q > 0).map(([sku, qty]) => ({ sku, qty }));
             if (!c.length) { toast.error("Add something to the cart first"); throw new Error("empty cart"); }
-            return (await createFn({ data: { merchantId, cart: c } })).id;
+            return (await createFn({ data: { merchantId, cart: c, accessToken: await token() } })).id;
           },
           onApprove: async (d: any) => {
-            await captureFn({ data: { merchantId, orderId: d.orderID } });
+            await captureFn({ data: { merchantId, orderId: d.orderID, accessToken: await token() } });
             setCart({});
             setDone("Payment complete! The invoice will appear in the FiskalBridge dashboard in a few seconds.");
           },
@@ -88,7 +94,7 @@ function Shop() {
       window.paypalSubs.Buttons({
         style: { layout: "horizontal", shape: "pill", label: "subscribe", tagline: false },
         createSubscription: async (_: any, actions: any) => {
-          const { planId } = await planFn({ data: { merchantId } });
+          const { planId } = await planFn({ data: { merchantId, accessToken: await token() } });
           return actions.subscription.create({ plan_id: planId });
         },
         onApprove: () => setDone("Welcome to the club! The first renewal invoice appears when PayPal bills the subscription."),
@@ -104,7 +110,7 @@ function Shop() {
     if (hasItems) renderBtnRef.current?.();
   }, [hasItems]);
 
-  if (cfg && !cfg.ok) return <main className="mx-auto max-w-md px-4 py-20 text-center text-muted-foreground">{cfg.error}</main>;
+  if (cfg && !cfg.ok) return <main className="mx-auto max-w-md px-4 py-20"><p className="rounded-xl border bg-card p-6 text-center text-muted-foreground">{cfg.error}</p></main>;
 
   return (
     <div className="min-h-screen">
@@ -112,6 +118,7 @@ function Shop() {
         <p>Sandbox demo — no real money. Log in to PayPal with a <strong className="font-bold">sandbox buyer account</strong> (from the Devpost testing instructions), not your real PayPal login.</p>
         <p className="mt-1">Or choose <strong className="font-bold">Debit or Credit Card</strong> and use a PayPal sandbox test card (any future expiry date, any CVV).</p>
       </div>
+      {cfg?.ok && cfg.liveMode && <div className="border-b border-warning bg-warning/20 px-4 py-2 text-center text-sm font-medium text-warning-foreground">Live mode — this payment will create an official fiscal invoice in FIRA.</div>}
       <main className="mx-auto max-w-4xl px-4 py-10">
         <p className="text-sm font-semibold uppercase tracking-widest text-primary">Test shop</p>
         <h1 className="mt-1 text-3xl font-bold">Varaždin Souvenirs (demo)</h1>

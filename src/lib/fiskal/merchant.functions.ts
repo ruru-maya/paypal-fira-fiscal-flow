@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { scrubText } from "./crypto";
 import { IS_PAYPAL_SANDBOX } from "./config";
+import { canUseTestShop, SHOP_PAUSED_MESSAGE } from "./shop-access";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function myMerchant(supabase: any) {
@@ -228,23 +229,29 @@ export const downloadFiraPdfFn = createServerFn({ method: "POST" })
   });
 
 /* ---------- Public test-shop functions (PayPal sandbox only; never expose secrets) ---------- */
-async function shopMerchant(merchantId: string) {
+async function shopMerchant(merchantId: string, accessToken?: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: m } = await supabaseAdmin.from("merchants").select("*").eq("id", merchantId).maybeSingle();
   if (!m || !m.paypal_connected_at) throw new Error("This test shop is not available.");
   if (!IS_PAYPAL_SANDBOX) throw new Error("The test shop only works with PayPal sandbox.");
+  let callerId: string | null = null;
+  if (!m.demo_mode && accessToken) {
+    const { data: u } = await supabaseAdmin.auth.getUser(accessToken);
+    callerId = u.user?.id ?? null;
+  }
+  if (!canUseTestShop(m, callerId)) throw new Error(SHOP_PAUSED_MESSAGE);
   return m;
 }
-const idSchema = z.object({ merchantId: z.string().uuid() });
+const idSchema = z.object({ merchantId: z.string().uuid(), accessToken: z.string().max(4096).optional() });
 
 export const getShopConfig = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => idSchema.parse(d))
   .handler(async ({ data }) => {
     try {
-      const m = await shopMerchant(data.merchantId);
+      const m = await shopMerchant(data.merchantId, data.accessToken);
       const engine = await import("./engine.server");
       const c = await engine.loadCredentials(m.id);
-      return { ok: true as const, clientId: c.paypalClientId, businessName: m.business_name, products: engine.SHOP_PRODUCTS.map((p) => ({ ...p })) };
+      return { ok: true as const, liveMode: !m.demo_mode, clientId: c.paypalClientId, businessName: m.business_name, products: engine.SHOP_PRODUCTS.map((p) => ({ ...p })) };
     } catch (e) {
       return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
     }
@@ -253,7 +260,7 @@ export const getShopConfig = createServerFn({ method: "GET" })
 export const shopCreateOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => idSchema.extend({ cart: z.array(z.object({ sku: z.string().max(20), qty: z.number().int().min(1).max(20) })).min(1).max(10) }).parse(d))
   .handler(async ({ data }) => {
-    const m = await shopMerchant(data.merchantId);
+    const m = await shopMerchant(data.merchantId, data.accessToken);
     const engine = await import("./engine.server");
     return { id: await engine.createShopOrder(m.id, data.cart) };
   });
@@ -261,7 +268,7 @@ export const shopCreateOrder = createServerFn({ method: "POST" })
 export const shopCaptureOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => idSchema.extend({ orderId: z.string().regex(/^[A-Z0-9]{5,40}$/) }).parse(d))
   .handler(async ({ data }) => {
-    const m = await shopMerchant(data.merchantId);
+    const m = await shopMerchant(data.merchantId, data.accessToken);
     const engine = await import("./engine.server");
     return engine.captureShopOrder(m.id, data.orderId);
   });
@@ -269,7 +276,7 @@ export const shopCaptureOrder = createServerFn({ method: "POST" })
 export const shopSubscriptionPlan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => idSchema.parse(d))
   .handler(async ({ data }) => {
-    const m = await shopMerchant(data.merchantId);
+    const m = await shopMerchant(data.merchantId, data.accessToken);
     const engine = await import("./engine.server");
     return { planId: await engine.ensureSubscriptionPlan(m) };
   });

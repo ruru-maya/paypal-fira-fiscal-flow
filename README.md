@@ -3,8 +3,16 @@
 Every PayPal payment becomes an invoice in [FIRA](https://app.fira.finance); every refund, chargeback or lost dispute becomes a storno. Set-and-forget for Croatian online merchants. Built for the PayPal AI Hackathon.
 
 - Live app: https://paypal-fira-fiscal-flow.lovable.app
-- Live demo view: https://paypal-fira-fiscal-flow.lovable.app/live/<DEMO_MERCHANT_ID>
-- Test shop: https://paypal-fira-fiscal-flow.lovable.app/shop/<DEMO_MERCHANT_ID>
+- Live demo view: https://paypal-fira-fiscal-flow.lovable.app/live/b196fa6b-532d-4566-b738-58657364eddb
+- Test shop: https://paypal-fira-fiscal-flow.lovable.app/shop/b196fa6b-532d-4566-b738-58657364eddb
+
+## Try it in 2 minutes (for judges)
+
+1. Open the [live demo view](https://paypal-fira-fiscal-flow.lovable.app/live/b196fa6b-532d-4566-b738-58657364eddb) (read-only dashboard).
+2. Open the [test shop](https://paypal-fira-fiscal-flow.lovable.app/shop/b196fa6b-532d-4566-b738-58657364eddb) in another tab, add a product and pay with the PayPal **sandbox** buyer account from the Devpost testing instructions — or choose "Debit or Credit Card" and use a PayPal sandbox test card.
+3. Within a few seconds the payment appears in the live view with the AI-prepared document, its explanation and the FIRA document number.
+
+No sign-up needed. Everything runs in the PayPal sandbox and in Testing mode: no real money moves, and FIRA creates offers (PONUDA), not fiscal invoices. Signing up as a merchant yourself needs your own FIRA account (a paid Croatian invoicing service), which is why the live view exists.
 
 ## Why
 
@@ -30,7 +38,7 @@ Croatian law requires every sale paid by card-type methods (PayPal included) to 
                                          yes  │                  no  │
                                               ▼                      ▼
                                    FIRA /webshop/order/custom   Review queue (merchant
-                                   (PONUDA in demo mode,        edits, re-validated,
+                                   (PONUDA in Testing mode,        edits, re-validated,
                                     fiscal invoice when live)   approve or skip)
                                               │
                                               ▼
@@ -58,9 +66,12 @@ Croatian law requires every sale paid by card-type methods (PayPal included) to 
 - **Code validates.** Totals must match PayPal to the cent (incl. shipping and discounts), VAT rates must be in {0, 5, 13, 25}, non-VAT merchants must be 0%. Invalid documents are never sent — there is no bypass.
 - **Humans review.** Low confidence (< 0.7) or any warning puts the document in the review queue. The merchant edits, the code re-validates, then they approve or skip with a reason.
 
-## Demo mode
+## Testing mode and Live mode
 
-ON by default. In demo mode every document is sent to FIRA as a **PONUDA** (offer), which is not fiscalized — safe for testing. Stornos are sent as PONUDA with negative amounts. Turning demo mode off sends `FISKALNI_RAČUN` / `FISKALNI_STORNO_RAČUN`. The test shop, sandbox refunds, dispute simulator and public live view work only in demo mode.
+- **Testing mode (default):** every document is sent to FIRA as an offer (**PONUDA**), which is not fiscalized; stornos are sent as offers with negative amounts.
+- **Live mode:** documents are sent as `FISKALNI_RAČUN` / `FISKALNI_STORNO_RAČUN`, which FIRA fiscalizes with the Tax Administration (JIR + QR code).
+- The public live view exists only in Testing mode.
+- The sandbox tools (test shop, sandbox refunds, dispute simulator) follow the PayPal sandbox environment. In Live mode the test shop works only for the signed-in merchant.
 
 ## Run it yourself
 
@@ -74,6 +85,13 @@ ON by default. In demo mode every document is sent to FIRA as a **PONUDA** (offe
 5. In **FIRA** (Basic or Pro plan): Postavke → Webshop / ERP → add a **Custom** integration, copy the API key, enable "Dozvoli dohvat podataka".
 6. Sign up in the app, complete the three onboarding steps, then open your test shop from the dashboard.
 
+## Environment variables
+
+- Public values in `.env` (see `.env.example`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID` (and their server twins). Publishable by design, protected by row-level security; replace with your own project's values.
+- Server secrets, never committed: `CREDENTIALS_ENCRYPTION_KEY`, `APP_PUBLIC_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LOVABLE_API_KEY`.
+
+Run the tests: `bun run test`
+
 ## Tech stack
 
 TanStack Start (React 19, Vite 7) on Cloudflare Workers · Tailwind CSS v4 + shadcn/ui · Postgres with row-level security and realtime (Lovable Cloud / Supabase) · PayPal REST APIs (Orders, Subscriptions, Webhooks, Refunds) and JS SDK · FIRA Webshop/ERP API v1.5.1 · Gemini via the Lovable AI gateway · Vitest.
@@ -82,8 +100,8 @@ TanStack Start (React 19, Vite 7) on Cloudflare Workers · Tailwind CSS v4 + sha
 
 - PayPal secret and FIRA key are AES-GCM encrypted in a table with no browser access; the UI only shows the last 4 characters.
 - Every table has row-level security; merchants only read their own rows. Browser users can update only their business settings columns.
-- Webhooks are accepted only with a valid PayPal signature. Simulator events (which can't be signed) are accepted only for demo-mode merchants holding a one-time nonce that expires after 5 minutes.
-- Public pages (test shop, live view) work only for demo-mode merchants; the shop exposes only the public PayPal client id; the live view is opt-in, has no raw payloads, and masks names and e-mails.
+- Webhooks are accepted only with a valid PayPal signature. Simulator events (which can't be signed) are accepted only in the PayPal sandbox, for a merchant holding a one-time nonce valid for 5 minutes.
+- Public pages: the live view is Testing-mode only and opt-in, has no raw payloads, and masks names and e-mails. The test shop exposes only the public PayPal client id and is owner-only in Live mode.
 - PayPal sandbox only; the base URL lives in one constant (`src/lib/fiskal/config.ts`).
 
 ## AI tools used
