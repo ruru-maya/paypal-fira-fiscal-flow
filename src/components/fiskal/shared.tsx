@@ -25,7 +25,7 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function DemoBanner() {
   return (
-    <div className="border-b border-warning bg-warning/40 px-4 py-2 text-center text-sm font-medium text-warning-foreground">
+    <div className="border-b border-warning bg-warning px-4 py-2 text-center text-sm font-semibold text-warning-foreground">
       Testing mode — FIRA creates offers, not official invoices
     </div>
   );

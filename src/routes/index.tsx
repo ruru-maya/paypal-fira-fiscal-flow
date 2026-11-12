@@ -18,22 +18,27 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-20 font-sans">
-      <p className="text-sm font-semibold uppercase tracking-widest text-primary">FiskalBridge</p>
-      <h1 className="mt-4 text-4xl font-bold leading-tight text-foreground sm:text-5xl">
+    <div className="font-sans">
+    <header className="bg-gradient-to-br from-primary to-[oklch(0.3_0.09_205)] text-primary-foreground">
+      <div className="mx-auto max-w-3xl px-6 py-20">
+      <p className="text-sm font-semibold uppercase tracking-widest text-primary-foreground/80">FiskalBridge</p>
+      <h1 className="mt-4 text-4xl font-bold leading-tight sm:text-5xl">
         PayPal payments in, fiscalized FIRA invoices out.
       </h1>
-      <p className="mt-6 text-lg text-muted-foreground">
+      <p className="mt-6 text-lg text-primary-foreground/90">
         Connect PayPal and FIRA once. Every payment becomes an invoice, every refund or chargeback a storno —
         automatically. We never touch your money.
       </p>
       <div className="mt-8 flex gap-3">
-        <Button asChild size="lg"><Link to="/auth">Get started</Link></Button>
-        <Button asChild size="lg" variant="outline"><Link to="/dashboard">Dashboard</Link></Button>
+        <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90"><Link to="/auth">Get started</Link></Button>
+        <Button asChild size="lg" variant="outline" className="border-white/70 bg-transparent text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"><Link to="/dashboard">Dashboard</Link></Button>
       </div>
+      </div>
+    </header>
+    <main className="mx-auto max-w-3xl px-6 pb-20">
       <ul className="mt-10 grid gap-3 sm:grid-cols-2">
         {EVENT_GROUPS_PLAIN.map((e) => (
-          <li key={e} className="flex items-center gap-3 rounded-lg border bg-card p-4 text-foreground">
+          <li key={e} className="flex items-center gap-3 rounded-lg border bg-card p-4 font-medium text-foreground shadow-sm">
             <span className="h-2.5 w-2.5 rounded-full bg-success" /> {e}
           </li>
         ))}
@@ -43,8 +48,8 @@ function Index() {
         <h2 className="text-2xl font-bold text-foreground">How it works</h2>
         <ol className="mt-6 space-y-3">
           {STEPS.map((s, i) => (
-            <li key={s.t} className="flex gap-4 rounded-lg border bg-card p-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">{i + 1}</span>
+            <li key={s.t} className="flex gap-4 rounded-lg border bg-card p-4 shadow-sm">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground">{i + 1}</span>
               <div><p className="font-semibold text-foreground">{s.t}</p><p className="text-sm text-muted-foreground">{s.d}</p></div>
             </li>
           ))}
@@ -52,7 +57,7 @@ function Index() {
         <h3 className="mt-12 text-lg font-semibold text-foreground">PayPal event → what we do</h3>
         <div className="mt-4 overflow-x-auto rounded-lg border bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-muted-foreground"><tr><th className="px-4 py-2 font-medium">PayPal event</th><th className="px-4 py-2 font-medium">What we do</th></tr></thead>
+            <thead className="bg-primary text-left text-primary-foreground"><tr><th className="px-4 py-2 font-medium">PayPal event</th><th className="px-4 py-2 font-medium">What we do</th></tr></thead>
             <tbody className="divide-y">
               {EVENT_TABLE.map(([e, a]) => <tr key={e}><td className="px-4 py-2 font-mono text-xs">{e}</td><td className="px-4 py-2">{a}</td></tr>)}
             </tbody>
@@ -61,6 +66,7 @@ function Index() {
       </section>
       <footer className="mt-20 border-t pt-6 text-sm text-muted-foreground">Open source (AGPL-3.0) · Not affiliated with PayPal or FIRA</footer>
     </main>
+    </div>
   );
 }
 

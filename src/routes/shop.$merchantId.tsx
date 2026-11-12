@@ -8,6 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { getShopConfig, shopCaptureOrder, shopCreateOrder, shopSubscriptionPlan } from "@/lib/fiskal/merchant.functions";
 
+const TILE = ["bg-[oklch(0.88_0.08_45)]", "bg-[oklch(0.86_0.09_15)]", "bg-[oklch(0.87_0.08_150)]"];
+const ICON: Record<string, string> = { "MUG-01": "☕", "LIC-02": "❤️", "BOOK-03": "📖" };
+
 export const Route = createFileRoute("/shop/$merchantId")({
   head: () => ({
     meta: [
@@ -114,34 +117,41 @@ function Shop() {
 
   return (
     <div className="min-h-screen">
-      <div className="border-b border-warning bg-warning/40 px-4 py-2 text-center text-sm font-medium text-warning-foreground">
+      <div className="border-b border-warning bg-warning px-4 py-2 text-center text-sm font-medium text-warning-foreground">
         <p>Sandbox demo — no real money. Log in to PayPal with a <strong className="font-bold">sandbox buyer account</strong> (from the Devpost testing instructions), not your real PayPal login.</p>
         <p className="mt-1">Or choose <strong className="font-bold">Debit or Credit Card</strong> and use a PayPal sandbox test card (any future expiry date, any CVV).</p>
       </div>
       {cfg?.ok && cfg.liveMode && <div className="border-b border-warning bg-warning/20 px-4 py-2 text-center text-sm font-medium text-warning-foreground">Live mode — this payment will create an official fiscal invoice in FIRA.</div>}
+      <header className="bg-gradient-to-br from-primary to-[oklch(0.3_0.09_205)] text-primary-foreground">
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <p className="text-sm font-semibold uppercase tracking-widest text-primary-foreground/80">Test shop</p>
+          <h1 className="mt-1 text-4xl font-bold">Varaždin Souvenirs (demo)</h1>
+          <p className="mt-2 text-primary-foreground/90">Payments go to {cfg?.ok ? cfg.businessName : "…"}'s PayPal sandbox and become FIRA documents automatically.</p>
+          <Link to="/live/$merchantId" params={{ merchantId }} target="_blank" className="mt-4 inline-block rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-white/90">Watch the invoice appear live →</Link>
+        </div>
+      </header>
       <main className="mx-auto max-w-4xl px-4 py-10">
-        <p className="text-sm font-semibold uppercase tracking-widest text-primary">Test shop</p>
-        <h1 className="mt-1 text-3xl font-bold">Varaždin Souvenirs (demo)</h1>
-        <p className="mt-2 text-muted-foreground">Payments go to {cfg?.ok ? cfg.businessName : "…"}'s PayPal sandbox and become FIRA documents automatically.</p>
-        <Link to="/live/$merchantId" params={{ merchantId }} target="_blank" className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline">Watch the invoice appear live →</Link>
         {done && <p className="mt-6 rounded-lg border border-success bg-success/10 p-4 font-medium text-success">{done}</p>}
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {products.map((p) => (
-            <div key={p.sku} className="flex flex-col rounded-xl border bg-card p-5">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {products.map((p, i) => (
+            <div key={p.sku} className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className={`flex h-24 items-center justify-center text-5xl ${TILE[i % TILE.length]}`} aria-hidden>{ICON[p.sku] ?? "🎁"}</div>
+              <div className="flex flex-1 flex-col p-5">
               <p className="font-semibold">{p.name}</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums">€{p.price.toFixed(2)}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-primary">€{p.price.toFixed(2)}</p>
               <div className="mt-4 flex items-center gap-2">
                 <Button size="icon" variant="outline" onClick={() => setCart({ ...cart, [p.sku]: Math.max(0, (cart[p.sku] ?? 0) - 1) })}><Minus className="h-4 w-4" /></Button>
                 <span className="w-6 text-center tabular-nums">{cart[p.sku] ?? 0}</span>
                 <Button size="icon" variant="outline" onClick={() => setCart({ ...cart, [p.sku]: (cart[p.sku] ?? 0) + 1 })}><Plus className="h-4 w-4" /></Button>
+              </div>
               </div>
             </div>
           ))}
         </div>
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
-          <section className="rounded-xl border bg-card p-5">
+          <section className="rounded-xl border-2 border-primary/40 bg-card p-5 shadow-sm">
             <h2 className="font-semibold">Cart</h2>
             {items.length === 0 ? <p className="mt-2 text-sm text-muted-foreground">Empty</p> : items.map(([sku, q]) => {
               const p = products.find((x) => x.sku === sku)!;
@@ -151,9 +161,9 @@ function Shop() {
             <div ref={btnRef} className={hasItems ? "mt-4 min-h-12" : "hidden"} />
             {!hasItems && <p className="mt-4 rounded-lg border border-dashed p-3 text-center text-sm text-muted-foreground">Add a product to pay</p>}
           </section>
-          <section className="rounded-xl border bg-card p-5">
+          <section className="rounded-xl border bg-accent p-5 shadow-sm">
             <h2 className="font-semibold">Souvenir of the Month club</h2>
-            <p className="mt-1 text-2xl font-bold">€9.99<span className="text-sm font-normal text-muted-foreground">/month</span></p>
+            <p className="mt-1 text-2xl font-bold text-primary">€9.99<span className="text-sm font-normal text-muted-foreground">/month</span></p>
             <p className="mt-2 text-sm text-muted-foreground">A surprise Varaždin souvenir every month. Each renewal becomes an invoice.</p>
             <div ref={subRef} className="mt-4 min-h-12" />
           </section>
