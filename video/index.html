@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FiskalBridge video</title>
+<style>
+  html, body { margin: 0; background: transparent; }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: "Inter", "DejaVu Sans", sans-serif; }
+  svg { position: absolute; inset: 0; font-family: "Inter", "DejaVu Sans", sans-serif; }
+  #cap { position: absolute; left: 0; right: 0; bottom: 38px; display: flex; justify-content: center; }
+  #cap div { background: rgba(17, 24, 39, 0.9); color: #fff; font-size: 46px; font-weight: 600; line-height: 60px; padding: 14px 36px 16px; border-radius: 18px; text-align: center; white-space: pre; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="cap"></div>
+</div>
+<script src="invoice.js"></script>
+<script src="timeline.js"></script>
+<script src="scenes.js"></script>
+<script>
+  const R = FB.resolve(FB.TIMELINE);
+  const meas = document.createElement("canvas").getContext("2d");
+  function wrap(text) {
+    meas.font = '600 46px "Inter", "DejaVu Sans", sans-serif';
+    if (meas.measureText(text).width <= 1500) return text;
+    const words = text.split(" ");
+    let best = null;
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(" "), b = words.slice(i).join(" ");
+      const d = Math.abs(meas.measureText(a).width - meas.measureText(b).width);
+      if (!best || d < best.d) best = { d, s: a + "\n" + b };
+    }
+    return best.s;
+  }
+  // Render global time T (seconds). opts.overlay: transparent background, only
+  // captions + scene-5 labels (composited over the screen recording by ffmpeg).
+  window.renderAt = function (T, opts = {}) {
+    const sc = R.scenes.find((s) => T >= s.start && T < s.start + s.dur) || R.scenes[R.scenes.length - 1];
+    const local = T - sc.start;
+    const t = local * (NOMINAL[sc.id] / sc.dur);
+    let svg = SCENES[sc.id](t, opts);
+    // soft fade-in at each scene start (not for the overlay / first scene)
+    if (!opts.overlay && sc.start > 0 && local < 0.3) svg += `<rect width="1920" height="1080" fill="#ecfdf5" opacity="${1 - local / 0.3}"/>`;
+    document.getElementById("svg").innerHTML = svg;
+    const c = opts.noCaptions ? null : R.captions.find((c) => T >= c.start && T < c.end);
+    document.getElementById("cap").innerHTML = c ? "<div></div>" : "";
+    if (c) document.querySelector("#cap div").textContent = wrap(c.text);
+    return sc.id;
+  };
+  window.ready = document.fonts.load('600 46px "Inter"').then(() => document.fonts.load('800 46px "Inter"')).then(() => true);
+</script>
+</body>
+</html>

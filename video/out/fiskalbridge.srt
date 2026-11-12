@@ -1,0 +1,111 @@
+1
+00:00:06,400 --> 00:00:11,835
+In Croatia, every retail sale to a private customer must be fiscalized —
+
+2
+00:00:11,915 --> 00:00:15,773
+reported to the Tax Administration in real time.
+
+3
+00:00:15,853 --> 00:00:20,238
+Since January 2026 this applies to every payment method:
+
+4
+00:00:20,318 --> 00:00:23,520
+cash, card, bank transfer, and PayPal.
+
+5
+00:00:24,400 --> 00:00:28,918
+Normally it's simple. The customer pays,
+
+6
+00:00:28,998 --> 00:00:37,141
+the invoicing software issues the invoice and sends it to the Tax Administration.
+
+7
+00:00:37,221 --> 00:00:45,011
+The tax office answers with a unique code — the JIR — printed on the invoice.
+
+8
+00:00:45,091 --> 00:00:49,520
+That code proves the sale was reported.
+
+9
+00:00:50,400 --> 00:00:53,063
+PayPal doesn't work like that.
+
+10
+00:00:53,143 --> 00:00:57,634
+The money lands in PayPal, not in the invoicing software —
+
+11
+00:00:57,714 --> 00:01:01,618
+so no invoice is created and nothing is reported.
+
+12
+00:01:01,698 --> 00:01:05,275
+Merchants copy every PayPal payment by hand,
+
+13
+00:01:05,355 --> 00:01:09,520
+and refunds, which need a storno, are easy to forget.
+
+14
+00:01:10,400 --> 00:01:15,017
+So we built FiskalBridge, a connector between PayPal and FIRA,
+
+15
+00:01:15,097 --> 00:01:19,207
+a Croatian invoicing service that fiscalizes invoices.
+
+16
+00:01:19,287 --> 00:01:25,428
+Connect PayPal and FIRA once. Every payment becomes an invoice, every refund a storno.
+
+17
+00:01:25,508 --> 00:01:30,379
+Rules decide what's needed, AI prepares the invoice lines and VAT,
+
+18
+00:01:30,459 --> 00:01:32,855
+and code checks every cent.
+
+19
+00:01:32,935 --> 00:01:36,917
+Anything uncertain waits for the merchant to review.
+
+20
+00:01:36,997 --> 00:01:39,520
+And we never touch the money.
+
+21
+00:01:40,400 --> 00:01:47,421
+Here's the real thing in the PayPal sandbox.
+
+22
+00:01:47,501 --> 00:01:53,508
+I buy two items and pay with PayPal…
+
+23
+00:01:53,588 --> 00:02:05,681
+a few seconds later the invoice is in, with its lines, VAT and the AI's explanation.
+
+24
+00:02:05,761 --> 00:02:13,669
+Now I refund it — the storno appears automatically.
+
+25
+00:02:13,749 --> 00:02:21,278
+And if something needs a check, it waits for me:
+
+26
+00:02:21,358 --> 00:02:29,520
+I fix it, the code validates it again, and it's sent.
+
+27
+00:02:30,400 --> 00:02:34,520
+FiskalBridge: PayPal payments in, fiscalized invoices out —
+
+28
+00:02:34,600 --> 00:02:39,120
+so Croatian merchants can finally offer PayPal in their shops.
