@@ -6,6 +6,7 @@ import { routeEvent, SUBSCRIBED_EVENTS } from "./routing";
 import { filterTaxRegimeWarnings, needsReview, type LineItem, type PaymentDetails, type SourceItem } from "./mapper";
 import { aiMapToInvoice, AI_MODEL } from "./mapper.ai.server";
 import { validateInvoice } from "./validate";
+import { detectCompany } from "./payer";
 import { buildFiraPayload, extractFiscal, invoiceTypeFor, type Payer } from "./fira";
 
 // Swap point for Phase 2 (AI mapper).
@@ -353,7 +354,7 @@ export async function processEvent(merchant: Json, event: Json, verified: boolea
         discount = Number(pu?.amount?.breakdown?.discount?.value ?? 0);
         const p = o.body.payer ?? o.body.payment_source?.paypal;
         payer = { name: [p?.name?.given_name, p?.name?.surname].filter(Boolean).join(" "), email: p?.email_address, country: p?.address?.country_code };
-        company = p?.business_name ?? pu?.shipping?.name?.full_name?.match?.(/d\.o\.o\.|GmbH|Ltd|S\.r\.l|SAS|B\.V\./i) ? pu.shipping.name.full_name : undefined;
+        company = detectCompany(p, pu);
         vatId = p?.tax_info?.tax_id;
       }
       const subId = r.billing_agreement_id;

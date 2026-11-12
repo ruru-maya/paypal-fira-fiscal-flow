@@ -154,7 +154,9 @@ export const listTimeline = createServerFn({ method: "GET" })
       .order("received_at", { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
-    return data ?? [];
+    const { withDisplayStatus } = await import("@/lib/fiskal/display-status");
+    const now = Date.now();
+    return (data ?? []).map((e: any) => ({ ...e, fiscal_documents: (e.fiscal_documents ?? []).map((d: any) => withDisplayStatus(d, now)) }));
   });
 
 const lineSchema = z.object({
@@ -306,13 +308,16 @@ export const getLiveView = createServerFn({ method: "GET" })
     if (!m || !m.demo_mode || !m.share_live_view) return { ok: false as const };
     const { data: evs } = await supabaseAdmin
       .from("paypal_events")
-      .select("id, event_type, route, amount, currency, received_at, simulated, verified, raw, fiscal_documents!fiscal_documents_paypal_event_id_fkey(id, kind, status, invoice_type, amount, currency, line_items, explanation_en, explanation_hr, confidence, warnings, ai_mapped, fira_invoice_number, fiscal_status, jir)")
+      .select("id, event_type, route, amount, currency, received_at, simulated, verified, raw, fiscal_documents!fiscal_documents_paypal_event_id_fkey(id, kind, status, invoice_type, amount, currency, line_items, explanation_en, explanation_hr, confidence, warnings, ai_mapped, fira_invoice_number, fiscal_status, jir, created_at, fira_response, fira_error, validation_errors)")
       .eq("merchant_id", m.id)
       .order("received_at", { ascending: false })
       .limit(50);
+    const { withDisplayStatus } = await import("@/lib/fiskal/display-status");
+    const now = Date.now();
     const events = (evs ?? []).map((e: any) => {
       const names = payerNames(e.raw);
-      const docs = (e.fiscal_documents ?? []).map((d: any) => ({
+      // Status is derived server-side; FIRA's raw response/errors never leave the server.
+      const docs = (e.fiscal_documents ?? []).map((full: any) => withDisplayStatus(full, now)).map(({ fira_response: _fr, fira_error: _fe, validation_errors: _ve, created_at: _ca, ...d }: any) => ({
         ...d,
         jir: d.jir ? "present" : null,
         explanation_en: scrubText(d.explanation_en, names),

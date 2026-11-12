@@ -10,13 +10,14 @@ const STYLES: Record<string, string> = {
   sent: "bg-success/15 text-success border-success/40",
   watching: "bg-warning/30 text-warning-foreground border-warning",
   needs_review: "bg-warning/30 text-warning-foreground border-warning",
+  sending: "bg-muted text-muted-foreground border-border",
   failed: "bg-destructive/10 text-destructive border-destructive/40",
   rejected: "bg-destructive/10 text-destructive border-destructive/40",
   ignored: "bg-muted text-muted-foreground border-border",
   skipped: "bg-muted text-muted-foreground border-border",
 };
 const LABELS: Record<string, string> = {
-  sent: "Sent", watching: "Watching", needs_review: "Needs review", failed: "Failed", rejected: "Rejected", ignored: "No action", skipped: "Skipped",
+  sent: "Sent", watching: "Watching", needs_review: "Needs review", sending: "Sending…", failed: "Failed", rejected: "Rejected", ignored: "No action", skipped: "Skipped",
 };
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STYLES[status] ?? STYLES["ignored"]}`}>{LABELS[status] ?? status}</span>;
@@ -37,6 +38,7 @@ export function whatWeDid(doc?: { kind: string; status: string; invoice_type?: s
   if (doc.status === "skipped") return "Skipped by you";
   if (doc.status === "ignored") return "No document needed";
   if (doc.status === "needs_review") return "Waiting for your review";
+  if (doc.status === "sending") return "Sending to FIRA…";
   if (doc.status === "failed") return "Sending to FIRA failed";
   const offer = doc.invoice_type === "PONUDA" ? " (as offer)" : "";
   return doc.kind === "storno" ? `Storno created in FIRA${offer}` : `Invoice created in FIRA${offer}`;
@@ -58,6 +60,7 @@ export function plainResult(doc: any): string {
   switch (doc.status) {
     case "watching": return "Dispute opened — we're keeping an eye on it";
     case "needs_review": return "Needs your attention";
+    case "sending": return "Sending to FIRA…";
     case "failed": return "Couldn't create the invoice";
     case "skipped": return "No invoice — you chose to skip it";
     case "rejected": return "Ignored — couldn't confirm it came from PayPal";
@@ -79,6 +82,7 @@ const PILL: Record<string, [string, string]> = {
   skipped: ["✓ Done", "bg-muted text-muted-foreground border-border"],
   watching: ["⚠ Check", "bg-warning/30 text-warning-foreground border-warning"],
   needs_review: ["⚠ Check", "bg-warning/30 text-warning-foreground border-warning"],
+  sending: ["… Sending", "bg-muted text-muted-foreground border-border"],
   failed: ["✕ Problem", "bg-destructive/10 text-destructive border-destructive/40"],
   rejected: ["✕ Problem", "bg-destructive/10 text-destructive border-destructive/40"],
 };

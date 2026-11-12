@@ -94,7 +94,7 @@ Run the tests: `bun run test`
 
 ## Tech stack
 
-TanStack Start (React 19, Vite 7) on Cloudflare Workers · Tailwind CSS v4 + shadcn/ui · Postgres with row-level security and realtime (Lovable Cloud / Supabase) · PayPal REST APIs (Orders, Subscriptions, Webhooks, Refunds) and JS SDK · FIRA Webshop/ERP API v1.5.1 · Gemini via the Lovable AI gateway · Vitest.
+TanStack Start (React 19, Vite 8) on Cloudflare Workers · Tailwind CSS v4 + shadcn/ui · Postgres with row-level security and realtime (Lovable Cloud / Supabase) · PayPal REST APIs (Orders, Subscriptions, Webhooks, Refunds) and JS SDK · FIRA Webshop/ERP API v1.5.1 · Gemini via the Lovable AI gateway · Vitest.
 
 ## Security notes
 
